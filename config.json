@@ -3,8 +3,8 @@
     "isCycle": 1,
     "droneVelocity": 0.83,
     "techVelocity": 0.58,
-    "numDrone": 4,
-    "numTech": 4,
+    "numDrone": 3,
+    "numTech": 2,
     "minTabuDuration": 5,
     "maxTabuDuration": 10,
     "droneLimitationFightTime": 120,
@@ -18,7 +18,7 @@
     "tabuNumRunPerDataSet": 2,
     "maxEjectionLevel": 2,
     "dataPath": "data/",
-    "dataName": "10.10.1.txt",
+    "dataName": "20.10.1.txt",
     "ws": "D:/Study/Lab/Soict/",
     "resultFolder": "D:/Study/Lab/Soict/result/"
 }

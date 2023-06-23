@@ -166,9 +166,12 @@ void Solution::initByDistance(bool reverse) {
             double waitTime = flightTime - timeGoToFirstCus;
             std::vector<int> test_trip(droneTripList[i].back());
             test_trip.push_back(nextCus);
+            test_trip.push_back(0);
+            test_trip.insert(test_trip.begin(), 0);
             double energy = check_Capacity(test_trip, input);
 
             if (flightTime > config.droneLimitationFightTime || waitTime > config.sampleLimitationWaitingTime || energy > 500000) {
+                std::cout << "E = " << energy << "\n";
                 droneTripList[index].emplace_back();
                 travelTime[i] = time[0][nextCus];
             } else {
@@ -218,19 +221,7 @@ void Solution::initByDistance(bool reverse) {
         i++;
         i %= config.numDrone + config.numTech;
     }
-    // std::cout << " \n Run + 1" << std::endl;
-    // std::cout << droneTripList.size() << std::endl;
-    // for(int i = 0; i < droneTripList.size(); i ++){
-    //     // std::cout << "Trip : ";
-    //     for (int  j = 0; j < droneTripList[i].size(); j++){
-    //         for (int k = 0; k < droneTripList[i][j].size(); k++){
-    //             std::cout << std::setw(5) << droneTripList.at(i).at(j).at(k);
-    //         }
-            
-    //     }
-        
-    // }
-    // std::cout << "\n";
+    
 }
 
 void Solution::initByAngle(bool reverse, int direction) {
@@ -305,8 +296,14 @@ void Solution::initByAngle(bool reverse, int direction) {
                     double flightTime = travelTime[i] + time[lastCus][nextCus] + time[nextCus][0];
                     double waitTime = flightTime - timeGoToFirstCus;
 
+
+                    std::vector<int> test_trip(droneTripList[i].back());
+                    test_trip.push_back(nextCus);
+                    test_trip.push_back(0);
+                    test_trip.insert(test_trip.begin(), 0);
+                    double energy = check_Capacity(test_trip, input);
                     if (flightTime <= config.droneLimitationFightTime &&
-                        waitTime <= config.sampleLimitationWaitingTime) {
+                        waitTime <= config.sampleLimitationWaitingTime && energy < 500000) {
                         travelTime[i] += time[lastCus][nextCus];
                         droneTripList[index].back().push_back(nextCus);
                         visitedCus[nextCus] = true;
@@ -424,7 +421,7 @@ double Solution::getScore() {
     for (int i = 0; i < techTripList.size(); i++) {
         if (techTripList[i].empty()) { continue; }
 
-        for (int j: techTripList[i]) {
+        for (int j: techTripList[i]) { 
             cz += std::max(0., techCompleteTime[i] - cusCompleteTime[j] - config.sampleLimitationWaitingTime);
         }
     }
@@ -3103,18 +3100,26 @@ void Solution::perturbation() {
     std::cout << "swap: " << num << std::endl;
 }
 void Solution::logConsole(){
+    int i = 1;
+    int j ;
     std::cout << " \nDrone Trip Init : " << droneTripList.size() << std::endl;
     for(auto trips : droneTripList){
-        std::cout << "\n";
+        std::cout << "Drone " << i << ": \n";
+        j = 1;
         for(auto trip : trips){
+            std::cout << "Trip " << j << ":";
             for (auto x : trip){
                 std::cout <<" ||" << x ;
             }
-            
-            double energy = check_Capacity(trip, input);
-            std::cout << std::setprecision(20);
+            j++;
+            std::vector<int> drone_trip(trip);
+            drone_trip.insert(drone_trip.begin(), 0);
+            drone_trip.push_back(0);
+            double energy = check_Capacity(drone_trip, input);
+            std::cout << std::setprecision(10);
             std::cout << " \nTrip energy : " << energy << "\n";
         }
+        i++;
     }
     std::cout << " \nTech Trip Init : " << techTripList.size() << std::endl;
     for(auto techTrips : techTripList){

@@ -51,6 +51,11 @@ Input::Input(double droneVelocity, double techVelocity, int limitationFightTime,
         cusOnlyServedByTech[0] = false;
 
         for (int i = 1; i < numCus + 1; i++) {
+            if (demand[i] > 2.7)
+            {
+                cusOnlyServedByTech[i] = true;
+            }
+            
             if (droneTimes[0][i] > limitationFightTime) {
                 cusOnlyServedByTech[i] = true;
             }

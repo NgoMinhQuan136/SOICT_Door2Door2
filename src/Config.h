@@ -38,21 +38,22 @@ public:
     int maxEjectionLevel;
     bool isCycle;
 
-    float k1 ;
-    float k2 ;
-    float c1 ;
-    float c2 ;
-    float c4 ;
-    float c5 ;
+    double k1 ;
+    double k2 ;
+    double c1 ;
+    double c2 ;
+    double c4 ;
+    double c5 ;
 
-    float W ; // drone weight; 
-    float g ; // gravitational constant;
-    float alpha ; // angle off attack;
-    float landing_speed ;
-    float takeoff_speed ;
-    float drone_speed ; //(m/s)
-    float h ;
-    float drone_energy ;
+    double droneWeight ; // drone weight; 
+    double g ; // gravitational constant;
+    double alpha ; // angle off attack;
+    double droneTakeoffSpeed ;
+    double droneCruiseSpeed ;
+    double droneLandingSpeed ; //(m/s)
+    double cruiseAlt ;
+    double droneCapacity ;
+    double droneBatteryPower;
     Config();
 };
 

@@ -55,7 +55,7 @@ public:
     std::vector<std::vector<int>> techTripList;
 
     std::map<std::string, std::string> ext;
-    double c{}, cz{}, dz{}, alpha1{}, alpha2{};
+    double c{}, cz{}, dz{}, alpha1{}, alpha2{}, ez{} , alpha3{};
 
     Solution(Config &config, Input &input, double alpha1, double alpha2);
 
@@ -93,6 +93,8 @@ public:
     void perturbation();
     void logConsole();
     std::string toString();
+
+
 
 private:
     void initByDistance(bool reverse);

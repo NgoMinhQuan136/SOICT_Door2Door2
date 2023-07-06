@@ -46,18 +46,19 @@ int main(int argc, char **argv)
     std::vector<std::string> paths = Utils::glob(config.ws + config.dataPath, config.dataName);
 
     json logAll;
-
+    std::string truck_path = "D:\\Study\\Lab\\Soict\\data\\Truck_config.json";
     for (const std::string &path : paths)
     {
         std::cout << path << std::endl;
         Input input(config.droneVelocity, config.techVelocity, config.droneLimitationFightTime, path);
+        input.truck_Input(input, truck_path);
         json logDataSet;
         for (int run = 0; run < config.tabuNumRunPerDataSet; run++)
         {
             std::cout << "start run: " << run + 1 << std::endl;
 
             if (config.type == "lcs")
-            {
+            {   
                 LocalSearch localSearch(config, input);
                 if (localSearch.initSolution.droneTripList.empty() && localSearch.initSolution.techTripList.empty())
                 {
@@ -88,8 +89,9 @@ int main(int argc, char **argv)
                 o.close();
             }
             else
-            {
+            {   
                 TabuSearch tabuSearch(config, input);
+                // std::cout << "OKE NOW 3: " << std::endl;
                 if (tabuSearch.initSolution.droneTripList.empty() && tabuSearch.initSolution.techTripList.empty())
                 {
                     std::cout << "Infeasible!" << std::endl;

@@ -9,29 +9,34 @@
 #include "Random.h"
 #include <iomanip>
 
+
 using json = nlohmann::json;
 using Random = effolkronium::random_static;
+Config config_1;
+Input input;
 
-double k1 = 0.8554;
-double k2 = 0.3051;
-double c1 = 2.8037;
-double c2 = 0.3177;
-double c4 = 0.0296;
-double c5 = 0.0279;
 
-double W = 1.5; // drone weight; 
-double g = 9.8; // gravitational constant;
-double alpha = 0.1745329252; // angle off attack;
-double landing_speed = 5;
-double takeoff_speed = 10;
-double drone_speed = 16.66666666666; //(m/s)
-double h = 200;
-double drone_energy = 5000000;
+double k1 = config_1.k1;
+double k2 = config_1.k2;
+double c1 = config_1.c1;
+double c2 = config_1.c2;
+double c4 = config_1.c4;
+double c5 = config_1.c5;
 
-double landing_Takeoff(double demand, double speed){
+double W = config_1.droneWeight; // drone weight; 
+double g = config_1.g; // gravitational constant;
+double alpha = config_1.alpha; // angle off attack;
+double landing_speed = config_1.droneLandingSpeed;
+double takeoff_speed = config_1.droneTakeoffSpeed;
+double drone_speed = config_1.droneCruiseSpeed; //(m/s)
+double h = config_1.cruiseAlt;
+double drone_energy = config_1.droneBatteryPower;
+
+
+
+double landing_Takeoff(double demand, double speed, double W){
     double P;
     P = k1*(W + demand)*g*(speed/2 + sqrt(pow((speed/2), 2.) + (W + demand)*g/pow(k2, 2.))) + c2*sqrt(pow(((W + demand)*g), 3.));
-    // printf("LANDING %0.15f \n", P);
     return P;
 }
 
@@ -42,22 +47,54 @@ double horizontal(double demand, double speed){
     double P3 = c4*pow(speed, 3);
     double P4 = pow(speed, 3.);
     P = (c1 + c2)*pow((P1 + P2 ), 3/4.) + P3;
-    // printf(" During : %0.15f\n", P);
     return P;
 }
 
-double check_Capacity(std::vector<int> trip , Input input){
+double totalTripEnergy(std::vector<int> trip , Input input){
     double total_demand = 0;
     double time = 0;
-    double total_Energy = landing_Takeoff(0, takeoff_speed)*h/takeoff_speed;
+    double total_Energy = landing_Takeoff(0, takeoff_speed, W)*h/takeoff_speed;
     for (int i = 0; i < trip.size() - 1; i++){
-        time = input.distances[trip[i]][trip[i + 1]] * 1000 / drone_speed;
+        time = input.distances[trip[i]][trip[i + 1]] / drone_speed;
         total_demand += input.demand[trip[i]];
-        total_Energy += horizontal(total_demand, drone_speed) * time ;
-        
+        total_Energy += horizontal(total_demand, drone_speed) * time ; 
     }
+    total_Energy+= landing_Takeoff(total_demand, landing_speed, W);
     
     return total_Energy;
+}
+
+int check_ratio(Input input, double time){
+    int i;
+    for (i = 0; i < input.ratio_v.size(); i++){
+        if (i <= time && time < i + 1){
+            break;
+        }
+    }
+    return i;
+}
+
+double countTimeTruck(double startTime, double distance, Input input){ 
+    double t = startTime / 3600;
+    int i = check_ratio(input, startTime / 3600);
+    double time;
+    double round = 0;
+    time = t + distance/(input.truckV_max*input.ratio_v[i] * 3600);
+    while (time > i+1){
+        if (time > 12){
+            round++;
+            time = time - 12;
+        }
+        distance = distance - input.truckV_max * input.ratio_v[i] * (i+1 - t) * 3600;
+        std::cout << distance << "\n";
+        t = i+1;
+        time = t + distance/(input.truckV_max*input.ratio_v[i+1] * 3600);
+        // std::cout << "Time 2 : " << time << "\n";
+        i++;
+    }
+    // std::cout << "Time :" << (( time + round*12 - startTime /3600 ) * 3600) << "\n";
+    return ( time + round*12 - startTime / 3600) * 3600;
+    
 }
 
 Solution *Solution::initSolution(Config &config, Input &input, InitType type, double alpha1, double alpha2) {
@@ -114,7 +151,9 @@ Solution *Solution::initSolution(Config &config, Input &input, InitType type, do
 }
 
 void Solution::initByDistance(bool reverse) {
+    std::vector<std::vector<double>> distances(input.distances);
     std::vector<std::vector<int>> orderDistance(input.numCus + 1);
+    
 
     for (int i = 0; i < input.numCus + 1; i++) {
         for (size_t e: Utils::sortIndices(input.distances[i], reverse)) {
@@ -124,8 +163,10 @@ void Solution::initByDistance(bool reverse) {
         }
     }
 
+
     std::vector<double> travelTime(config.numTech + config.numDrone, 0);
     std::vector<bool> visitedCus(input.numCus + 1, false);
+    std::vector<double> truckDemand(config.numTech, 0);
     visitedCus[0] = true;
     int numVisitedCus = 0;
     int nIter = 0, i = 0;
@@ -153,32 +194,36 @@ void Solution::initByDistance(bool reverse) {
                 }
             }
 
+            
+
             if (nextCus <= 0) {
                 continue;
             }
 
-            double timeGoToFirstCus = time[0][nextCus];
+            double timeGoToFirstCus = time[0][nextCus] + input.serviceTimeByDrone[nextCus];
             if (!droneTripList[index].back().empty()) {
-                timeGoToFirstCus = time[0][droneTripList[index].back()[0]];
+                timeGoToFirstCus = time[0][droneTripList[index].back()[0]] + input.serviceTimeByDrone[0];
             }
 
-            double flightTime = travelTime[i] + time[lastCus][nextCus] + time[nextCus][0];
+            double flightTime = travelTime[i] + time[lastCus][nextCus] + input.serviceTimeByDrone[nextCus] + time[nextCus][0];
             double waitTime = flightTime - timeGoToFirstCus;
             std::vector<int> test_trip(droneTripList[i].back());
+            double droneTripDemand = 0;
             test_trip.push_back(nextCus);
+            for (int k = 0; k < test_trip.size(); k++){
+                droneTripDemand += input.demand[test_trip[k]];
+            }
             test_trip.push_back(0);
             test_trip.insert(test_trip.begin(), 0);
-            double energy = check_Capacity(test_trip, input);
+            double energy = totalTripEnergy(test_trip, input);
 
-            if (flightTime > config.droneLimitationFightTime || waitTime > config.sampleLimitationWaitingTime || energy > 500000) {
-                std::cout << "E = " << energy << "\n";
+            if ( energy > config.droneBatteryPower || waitTime > config.sampleLimitationWaitingTime || droneTripDemand > config.droneCapacity)  {
                 droneTripList[index].emplace_back();
-                travelTime[i] = time[0][nextCus];
+                travelTime[i] = time[0][nextCus] + input.serviceTimeByDrone[nextCus];
             } else {
-                travelTime[i] += time[lastCus][nextCus];
+                travelTime[i] += time[lastCus][nextCus] + input.serviceTimeByDrone[nextCus];
             }
             droneTripList[index].back().push_back(nextCus);
-
             visitedCus[nextCus] = true;
             numVisitedCus++;
         } else {
@@ -199,20 +244,23 @@ void Solution::initByDistance(bool reverse) {
                 }
             }
 
+            
             if (nextCus <= 0) {
                 continue;
             }
 
-            double timeGoToFirstCus = time[0][nextCus];
+            double timeGoToFirstCus = countTimeTruck(travelTime[i], distances[lastCus][nextCus], input) + input.serviceTimeByTruck[nextCus];
             if (!techTripList[index].empty()) {
-                timeGoToFirstCus = time[0][techTripList[index][0]];
+                timeGoToFirstCus = countTimeTruck(travelTime[i], distances[0][techTripList[index][0]], input);
             }
-
-            double waitTime = travelTime[i] + time[lastCus][nextCus] + time[nextCus][0] - timeGoToFirstCus;
-
-            if (waitTime <= config.sampleLimitationWaitingTime) {
+            
+            double timeToNextCus = countTimeTruck(travelTime[i], distances[lastCus][nextCus], input);
+            double timeNextCusToDepot = countTimeTruck(travelTime[i]+timeToNextCus, distances[nextCus][0], input);
+            double waitTime = travelTime[i] + timeToNextCus + input.serviceTimeByTruck[nextCus] + timeNextCusToDepot - timeGoToFirstCus;
+            if (waitTime <= config.sampleLimitationWaitingTime && truckDemand[index] + input.demand[nextCus] <= input.truckWeight_max) {
                 techTripList[index].push_back(nextCus);
-                travelTime[i] += time[lastCus][nextCus];
+                travelTime[i] += timeToNextCus + input.serviceTimeByTruck[nextCus];
+                truckDemand[index] += input.demand[nextCus];
                 visitedCus[nextCus] = true;
                 numVisitedCus++;
             }
@@ -225,7 +273,9 @@ void Solution::initByDistance(bool reverse) {
 }
 
 void Solution::initByAngle(bool reverse, int direction) {
+    std::vector<std::vector<double>> distances(input.distances);
     std::vector<std::vector<int>> orderDistance(input.numCus + 1);
+    std::vector<double> truckDemand(config.numTech, 0);
 
     for (int i = 0; i < input.numCus + 1; i++) {
         for (size_t e: Utils::sortIndices(input.distances[i], reverse)) {
@@ -275,7 +325,7 @@ void Solution::initByAngle(bool reverse, int direction) {
     visitedCus[0] = true;
     int numVisitedCus = 0;
     int nIter = 0, i = 0;
-
+    
     while (numVisitedCus < input.numCus &&
            nIter < (config.numDrone + config.numTech) * input.numCus) {
         nIter++;
@@ -288,23 +338,26 @@ void Solution::initByAngle(bool reverse, int direction) {
             droneTripList[index].emplace_back();
             int j = 0;
             lastCus = 0;
-            double timeGoToFirstCus = time[0][orderAngle[0]];
+            double timeGoToFirstCus = time[0][orderAngle[0]] + input.serviceTimeByDrone[orderAngle[0]];
             int remainCus = (int) orderAngle.size();
             while (j < remainCus) {
                 int nextCus = orderAngle[j];
                 if (!input.cusOnlyServedByTech[nextCus]) {
-                    double flightTime = travelTime[i] + time[lastCus][nextCus] + time[nextCus][0];
+                    double flightTime = travelTime[i] + time[lastCus][nextCus] + input.serviceTimeByDrone[nextCus] + time[nextCus][0];
                     double waitTime = flightTime - timeGoToFirstCus;
 
 
                     std::vector<int> test_trip(droneTripList[i].back());
+                    double droneTripDemand = 0;
                     test_trip.push_back(nextCus);
+                    for (int k = 0; k < test_trip.size(); k++){
+                        droneTripDemand += input.demand[test_trip[k]];
+                        }
                     test_trip.push_back(0);
                     test_trip.insert(test_trip.begin(), 0);
-                    double energy = check_Capacity(test_trip, input);
-                    if (flightTime <= config.droneLimitationFightTime &&
-                        waitTime <= config.sampleLimitationWaitingTime && energy < 500000) {
-                        travelTime[i] += time[lastCus][nextCus];
+                    double energy = totalTripEnergy(test_trip, input);
+                    if ( waitTime <= config.sampleLimitationWaitingTime && energy < config.droneBatteryPower && droneTripDemand <= config.droneCapacity) {
+                        travelTime[i] += time[lastCus][nextCus] + input.serviceTimeByDrone[nextCus];
                         droneTripList[index].back().push_back(nextCus);
                         visitedCus[nextCus] = true;
                         numVisitedCus++;
@@ -324,15 +377,17 @@ void Solution::initByAngle(bool reverse, int direction) {
                 time = input.techTimes;
                 int j = 0;
                 lastCus = 0;
-                double timeGoToFirstCus = time[0][orderAngle[0]];
+                double timeGoToFirstCus = countTimeTruck(0, distances[0][orderAngle[0]], input) + input.serviceTimeByTruck[orderAngle[0]];
                 int remainCus = (int) orderAngle.size();
                 while (j < remainCus) {
                     int nextCus = orderAngle[j];
-                    double waitTime = travelTime[i] + time[lastCus][nextCus] + time[nextCus][0] - timeGoToFirstCus;
+                    double timeToNextCus = countTimeTruck(travelTime[i], distances[lastCus][nextCus], input) + input.serviceTimeByTruck[orderAngle[nextCus]];
+                    double timeNextCusToDepot = countTimeTruck ( travelTime[i] + timeToNextCus, distances[nextCus][0], input);
+                    double waitTime = travelTime[i] + timeToNextCus + timeNextCusToDepot - timeGoToFirstCus;
 
-                    if (waitTime <= config.sampleLimitationWaitingTime) {
+                    if (waitTime <= config.sampleLimitationWaitingTime || truckDemand[i] + input.demand[nextCus] < input.truckV_max) {
                         techTripList[index].push_back(nextCus);
-                        travelTime[i] += time[lastCus][nextCus];
+                        travelTime[i] += timeToNextCus;
                         visitedCus[nextCus] = true;
                         numVisitedCus++;
                         orderAngle.erase(orderAngle.begin() + j);
@@ -350,11 +405,15 @@ void Solution::initByAngle(bool reverse, int direction) {
     }
 }
 
-double Solution::getScore() {
+double Solution::getScore() { //them quay lai Kho
     std::vector<double> techCompleteTime(config.numTech, 0);
     std::vector<double> droneCompleteTime(config.numDrone, 0);
     std::vector<double> cusCompleteTime(input.numCus + 1, 0);
     std::vector<std::vector<double>> droneTripCompleteTime;
+    std::vector<std::vector<double>> totalDemand;
+    std::vector<std::vector<double>> overEnergyComplete;
+    std::vector<std::vector<double>> distances(input.distances);
+    std::vector<double> truckDemand(config.numTech, 0);
 
     int maxTrip = 0;
     for (auto &i: droneTripList) {
@@ -367,9 +426,20 @@ double Solution::getScore() {
         std::vector<double> tripTime(maxTrip, 0);
         droneTripCompleteTime.push_back(tripTime);
     }
+    for (int i = 0; i < config.numDrone; i++){
+        std::vector<double> tripEnergy(maxTrip, 0);
+        std::vector<double> tripDemand(maxTrip, 0);
+        overEnergyComplete.push_back(tripEnergy);
+        totalDemand.push_back(tripDemand);
+    }
+
+    
 
     double tmp, tmp1;
-    dz = 0, cz = 0;
+    dz = 0, cz = 0, ez = 0;
+    // cz: waiting time
+    // dz: capacity truck and drone weight
+    // ez : energy
 
     double allTechTime = 0, allDroneTime = 0;
 
@@ -378,16 +448,18 @@ double Solution::getScore() {
             continue;
         }
 
-        tmp = input.techTimes[0][techTripList[i][0]];
+        tmp = countTimeTruck(0, distances[0][techTripList[i][0]], input) + input.serviceTimeByTruck[techTripList[i][0]];
 
         cusCompleteTime[techTripList[i][0]] = tmp;
 
         for (int j = 0; j < (int) techTripList[i].size() - 1; j++) {
-            tmp += input.techTimes[techTripList[i][j]][techTripList[i][j + 1]];
+            tmp += countTimeTruck(tmp, distances[techTripList[i][j]][techTripList[i][j + 1]], input) + input.serviceTimeByTruck[techTripList[i][j + 1]];
             cusCompleteTime[techTripList[i][j + 1]] = tmp;
+            truckDemand[i] += input.demand[techTripList[i][j + 1]];
         }
 
         techCompleteTime[i] = tmp + input.techTimes[techTripList[i].back()][0];
+        techCompleteTime[i] = tmp + countTimeTruck(tmp , distances[techTripList[i].back()][0], input);
         if (techCompleteTime[i] > allTechTime) {
             allTechTime = techCompleteTime[i];
         }
@@ -399,13 +471,19 @@ double Solution::getScore() {
             if (droneTripList[i][j].empty()) {
                 continue;
             }
-
-            tmp1 = input.droneTimes[0][droneTripList[i][j][0]];
+            std::vector<int> eachTripDrone(droneTripList[i][j]);
+            eachTripDrone.push_back(0);
+            eachTripDrone.insert(eachTripDrone.begin(), 0);
+            overEnergyComplete[i][j] = totalTripEnergy(eachTripDrone, input) ;
+            totalDemand[i][j] = input.demand[droneTripList[i][j][0]];
+            
+            tmp1 = input.droneTimes[0][droneTripList[i][j][0]] + input.serviceTimeByDrone[droneTripList[i][j][0]];
             cusCompleteTime[droneTripList[i][j][0]] = tmp1;
 
             for (int k = 0; k < (int) droneTripList[i][j].size() - 1; k++) {
-                tmp1 += input.droneTimes[droneTripList[i][j][k]][droneTripList[i][j][k + 1]];
+                tmp1 += (input.droneTimes[droneTripList[i][j][k]][droneTripList[i][j][k + 1]] + input.serviceTimeByDrone[droneTripList[i][j][k + 1]]);
                 cusCompleteTime[droneTripList[i][j][k + 1]] = tmp1;
+                totalDemand[i][j] += input.demand[droneTripList[i][j][k+1]];
             }
             droneTripCompleteTime[i][j] = tmp1 + input.droneTimes[droneTripList[i][j].back()][0];
             tmp += droneTripCompleteTime[i][j];
@@ -420,6 +498,7 @@ double Solution::getScore() {
 
     for (int i = 0; i < techTripList.size(); i++) {
         if (techTripList[i].empty()) { continue; }
+        dz += std::max(0., truckDemand[i] - input.truckWeight_max);
 
         for (int j: techTripList[i]) { 
             cz += std::max(0., techCompleteTime[i] - cusCompleteTime[j] - config.sampleLimitationWaitingTime);
@@ -435,11 +514,20 @@ double Solution::getScore() {
                 cz += std::max(0.,
                                droneTripCompleteTime[i][j] - cusCompleteTime[k] - config.sampleLimitationWaitingTime);
             }
-            dz += std::max(0., droneTripCompleteTime[i][j] - config.droneLimitationFightTime);
         }
     }
+    for (int i = 0; i < droneTripList.size(); i++){
+        for (int j = 0; j < droneTripList[i].size(); j++){
+            double overEnergydrone = (overEnergyComplete[i][j] - config.droneBatteryPower );
+            ez += std::max(0., overEnergydrone);
+            double overWeight = (totalDemand[i][j] - config.droneCapacity);
+            dz += std::max(0., overWeight);
+        }
+        
+    }
 
-    return c + alpha1 * cz + alpha2 * dz;
+
+    return c + alpha1 * cz + alpha2 * dz + alpha3 * ez ;
 }
 
 Solution::Solution(Config &config, Input &input, double alpha1, double alpha2) {
@@ -3109,13 +3197,13 @@ void Solution::logConsole(){
         for(auto trip : trips){
             std::cout << "Trip " << j << ":";
             for (auto x : trip){
-                std::cout <<" ||" << x ;
+                std::cout <<" | " << x ;
             }
             j++;
             std::vector<int> drone_trip(trip);
             drone_trip.insert(drone_trip.begin(), 0);
             drone_trip.push_back(0);
-            double energy = check_Capacity(drone_trip, input);
+            double energy = totalTripEnergy(drone_trip, input);
             std::cout << std::setprecision(10);
             std::cout << " \nTrip energy : " << energy << "\n";
         }
@@ -3125,7 +3213,7 @@ void Solution::logConsole(){
     for(auto techTrips : techTripList){
         std::cout << "\n";
         for(auto techTrip : techTrips){
-            std:: cout << "||" << techTrip;
+            std:: cout << " | " << techTrip;
         }
     }
     std::cout << " \n "  << std::endl;

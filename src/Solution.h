@@ -52,7 +52,7 @@ public:
     Config config;
     Input input;
     std::vector<std::vector<std::vector<int>>> droneTripList;
-    std::vector<std::vector<int>> techTripList;
+    std::vector<std::vector<std::vector<int>>> techTripList;
 
     std::map<std::string, std::string> ext;
     double c{}, cz{}, dz{}, alpha1{}, alpha2{}, ez{} , alpha3{};

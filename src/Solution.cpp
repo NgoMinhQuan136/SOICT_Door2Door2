@@ -86,13 +86,11 @@ double countTimeTruck(double startTime, double distance, Input input){
             time = time - 12;
         }
         distance = distance - input.truckV_max * input.ratio_v[i] * (i+1 - t) * 3600;
-        std::cout << distance << "\n";
         t = i+1;
         time = t + distance/(input.truckV_max*input.ratio_v[i+1] * 3600);
-        // std::cout << "Time 2 : " << time << "\n";
         i++;
     }
-    // std::cout << "Time :" << (( time + round*12 - startTime /3600 ) * 3600) << "\n";
+
     return ( time + round*12 - startTime / 3600) * 3600;
     
 }
@@ -131,7 +129,9 @@ Solution *Solution::initSolution(Config &config, Input &input, InitType type, do
         }
     }
     if (type != ANGLE) {
+
         current = new Solution(config, input, alpha1, alpha2);
+        double new_score = current->getScore();
         current->initByDistance(false);
         currentScore = current->getScore();
         if (currentScore < bestScore) {
@@ -148,13 +148,13 @@ Solution *Solution::initSolution(Config &config, Input &input, InitType type, do
     }
     best->logConsole();
     return best;
+    
 }
 
 void Solution::initByDistance(bool reverse) {
     std::vector<std::vector<double>> distances(input.distances);
     std::vector<std::vector<int>> orderDistance(input.numCus + 1);
     
-
     for (int i = 0; i < input.numCus + 1; i++) {
         for (size_t e: Utils::sortIndices(input.distances[i], reverse)) {
             if (e != i && e != input.numCus + 1) {
@@ -163,16 +163,17 @@ void Solution::initByDistance(bool reverse) {
         }
     }
 
-
     std::vector<double> travelTime(config.numTech + config.numDrone, 0);
     std::vector<bool> visitedCus(input.numCus + 1, false);
     std::vector<double> truckDemand(config.numTech, 0);
     visitedCus[0] = true;
     int numVisitedCus = 0;
-    int nIter = 0, i = 0;
+    int nIter = 0, i = -1;
     while (numVisitedCus < input.numCus &&
            nIter < (config.numDrone + config.numTech) * input.numCus) {
         nIter++;
+        i++;
+        i %= config.numDrone + config.numTech;
         std::vector<std::vector<double>> time;
         int lastCus;
         int index = i;
@@ -194,12 +195,9 @@ void Solution::initByDistance(bool reverse) {
                 }
             }
 
-            
-
             if (nextCus <= 0) {
                 continue;
             }
-
             double timeGoToFirstCus = time[0][nextCus] + input.serviceTimeByDrone[nextCus];
             if (!droneTripList[index].back().empty()) {
                 timeGoToFirstCus = time[0][droneTripList[index].back()[0]] + input.serviceTimeByDrone[0];
@@ -229,13 +227,14 @@ void Solution::initByDistance(bool reverse) {
         } else {
             time = input.techTimes;
             index -= config.numDrone;
-
             if (techTripList[index].empty()) {
+                techTripList[index].emplace_back();
+            }
+            if (techTripList[index].back().empty()) {
                 lastCus = 0;
             } else {
-                lastCus = techTripList[index].back();
+                lastCus = techTripList[index].back().back();
             }
-
             int nextCus = -1;
             for (int tmp: orderDistance[lastCus]) {
                 if (!visitedCus[tmp]) {
@@ -250,24 +249,31 @@ void Solution::initByDistance(bool reverse) {
             }
 
             double timeGoToFirstCus = countTimeTruck(travelTime[i], distances[lastCus][nextCus], input) + input.serviceTimeByTruck[nextCus];
-            if (!techTripList[index].empty()) {
-                timeGoToFirstCus = countTimeTruck(travelTime[i], distances[0][techTripList[index][0]], input);
+            if (!techTripList[index].back().empty()) {
+                timeGoToFirstCus = countTimeTruck(travelTime[i], distances[0][techTripList[index].back()[0]], input);
             }
             
-            double timeToNextCus = countTimeTruck(travelTime[i], distances[lastCus][nextCus], input);
+            double timeToNextCus = countTimeTruck(travelTime[i], distances[lastCus][nextCus], input) + input.serviceTimeByTruck[nextCus];
             double timeNextCusToDepot = countTimeTruck(travelTime[i]+timeToNextCus, distances[nextCus][0], input);
             double waitTime = travelTime[i] + timeToNextCus + input.serviceTimeByTruck[nextCus] + timeNextCusToDepot - timeGoToFirstCus;
-            if (waitTime <= config.sampleLimitationWaitingTime && truckDemand[index] + input.demand[nextCus] <= input.truckWeight_max) {
-                techTripList[index].push_back(nextCus);
-                travelTime[i] += timeToNextCus + input.serviceTimeByTruck[nextCus];
-                truckDemand[index] += input.demand[nextCus];
-                visitedCus[nextCus] = true;
-                numVisitedCus++;
+            std::vector<int> test_trip(techTripList[index].back());
+            double truckTripDemand = 0;
+            test_trip.push_back(nextCus);
+            for (int k = 0; k < test_trip.size(); k++){
+                truckTripDemand += input.demand[test_trip[k]];
             }
+            if (waitTime > config.sampleLimitationWaitingTime || truckTripDemand > input.truckWeight_max)  {
+                techTripList[index].emplace_back();
+                travelTime[i] = countTimeTruck(travelTime[i], distances[0][nextCus], input) + input.serviceTimeByDrone[nextCus];
+            } else {
+                travelTime[i] += timeToNextCus;
+            }
+            techTripList[index].back().push_back(nextCus);
+            visitedCus[nextCus] = true;
+            numVisitedCus++;
         }
 
-        i++;
-        i %= config.numDrone + config.numTech;
+        
     }
     
 }
@@ -284,13 +290,11 @@ void Solution::initByAngle(bool reverse, int direction) {
             }
         }
     }
-
     int pivotCus = orderDistance[0][0];
     std::vector<std::vector<double>> coordinates = Utils::slice(input.coordinates, 1,
                                                                 (int) input.coordinates.size() - 2);
     std::vector<double> angle;
     std::vector<double> perpendicular = {coordinates[pivotCus - 1][1], coordinates[pivotCus - 1][0] * -1};
-
     for (int i = 0; i < (int) coordinates.size(); i++) {
         if (i == pivotCus - 1) {
             angle.push_back(0.);
@@ -325,7 +329,6 @@ void Solution::initByAngle(bool reverse, int direction) {
     visitedCus[0] = true;
     int numVisitedCus = 0;
     int nIter = 0, i = 0;
-    
     while (numVisitedCus < input.numCus &&
            nIter < (config.numDrone + config.numTech) * input.numCus) {
         nIter++;
@@ -373,7 +376,7 @@ void Solution::initByAngle(bool reverse, int direction) {
             }
         } else {
             index -= config.numDrone;
-            if (techTripList[index].empty()) {
+            techTripList[index].emplace_back();    
                 time = input.techTimes;
                 int j = 0;
                 lastCus = 0;
@@ -381,12 +384,12 @@ void Solution::initByAngle(bool reverse, int direction) {
                 int remainCus = (int) orderAngle.size();
                 while (j < remainCus) {
                     int nextCus = orderAngle[j];
-                    double timeToNextCus = countTimeTruck(travelTime[i], distances[lastCus][nextCus], input) + input.serviceTimeByTruck[orderAngle[nextCus]];
+                    double timeToNextCus = countTimeTruck(travelTime[i], distances[lastCus][nextCus], input) + input.serviceTimeByTruck[nextCus];
                     double timeNextCusToDepot = countTimeTruck ( travelTime[i] + timeToNextCus, distances[nextCus][0], input);
                     double waitTime = travelTime[i] + timeToNextCus + timeNextCusToDepot - timeGoToFirstCus;
 
-                    if (waitTime <= config.sampleLimitationWaitingTime || truckDemand[i] + input.demand[nextCus] < input.truckV_max) {
-                        techTripList[index].push_back(nextCus);
+                    if (waitTime <= config.sampleLimitationWaitingTime && truckDemand[i] + input.demand[nextCus] < input.truckV_max) {
+                        techTripList[index].back().push_back(nextCus);
                         travelTime[i] += timeToNextCus;
                         visitedCus[nextCus] = true;
                         numVisitedCus++;
@@ -397,7 +400,7 @@ void Solution::initByAngle(bool reverse, int direction) {
                         j++;
                     }
                 }
-            }
+            
         }
 
         i++;
@@ -405,23 +408,29 @@ void Solution::initByAngle(bool reverse, int direction) {
     }
 }
 
-double Solution::getScore() { //them quay lai Kho
+double Solution::getScore() { 
     std::vector<double> techCompleteTime(config.numTech, 0);
     std::vector<double> droneCompleteTime(config.numDrone, 0);
     std::vector<double> cusCompleteTime(input.numCus + 1, 0);
     std::vector<std::vector<double>> droneTripCompleteTime;
-    std::vector<std::vector<double>> totalDemand;
+    std::vector<std::vector<double>> truckTripCompleteTime;
+    std::vector<std::vector<double>> totalDroneDemand;
+    std::vector<std::vector<double>> totalTruckDemand;
     std::vector<std::vector<double>> overEnergyComplete;
     std::vector<std::vector<double>> distances(input.distances);
     std::vector<double> truckDemand(config.numTech, 0);
-
     int maxTrip = 0;
     for (auto &i: droneTripList) {
         if (maxTrip < i.size()) {
             maxTrip = (int) i.size();
         }
     }
-
+    int maxTechTrip = 0;
+    for (auto &i : techTripList){
+        if (maxTechTrip < i.size()){
+            maxTechTrip = (int) i.size();
+        }
+    }
     for (int i = 0; i < config.numDrone; i++) {
         std::vector<double> tripTime(maxTrip, 0);
         droneTripCompleteTime.push_back(tripTime);
@@ -430,10 +439,14 @@ double Solution::getScore() { //them quay lai Kho
         std::vector<double> tripEnergy(maxTrip, 0);
         std::vector<double> tripDemand(maxTrip, 0);
         overEnergyComplete.push_back(tripEnergy);
-        totalDemand.push_back(tripDemand);
+        totalDroneDemand.push_back(tripDemand);
     }
-
-    
+    for (int i = 0; i < config.numTech; i++){
+        std::vector<double> tripTechTime(maxTechTrip, 0);
+        std::vector<double> tripTechDemand(maxTechTrip, 0);
+        truckTripCompleteTime.push_back(tripTechTime);
+        totalTruckDemand.push_back(tripTechDemand);
+    }
 
     double tmp, tmp1;
     dz = 0, cz = 0, ez = 0;
@@ -442,26 +455,26 @@ double Solution::getScore() { //them quay lai Kho
     // ez : energy
 
     double allTechTime = 0, allDroneTime = 0;
-
     for (int i = 0; i < techTripList.size(); i++) {
-        if (techTripList[i].empty()) {
+        tmp = 0;
+        for(int j = 0; j < techTripList[i].size(); j++){
+            if (techTripList[i][j].empty()) {
             continue;
+            }
+            totalTruckDemand[i][j] = input.demand[techTripList[i][j][0]];
+            tmp1 = countTimeTruck(0, distances[0][techTripList[i][j][0]], input) + input.serviceTimeByTruck[techTripList[i][j][0]];
+            cusCompleteTime[techTripList[i][j][0]] = tmp1;
+            for (int k = 0; k < (int) techTripList[i][j].size() - 1; k++) {
+                tmp1 += countTimeTruck(tmp, distances[techTripList[i][j][k]][techTripList[i][j][k + 1]], input) + input.serviceTimeByTruck[techTripList[i][j][k + 1]];
+                cusCompleteTime[techTripList[i][j][k + 1]] = tmp1;
+                totalTruckDemand[i][j] += input.demand[techTripList[i][j][k + 1]];
+            }
+            truckTripCompleteTime[i][j] = tmp1 + countTimeTruck(tmp , distances[techTripList[i][j].back()][0], input);
+            tmp += truckTripCompleteTime[i][j];
         }
-
-        tmp = countTimeTruck(0, distances[0][techTripList[i][0]], input) + input.serviceTimeByTruck[techTripList[i][0]];
-
-        cusCompleteTime[techTripList[i][0]] = tmp;
-
-        for (int j = 0; j < (int) techTripList[i].size() - 1; j++) {
-            tmp += countTimeTruck(tmp, distances[techTripList[i][j]][techTripList[i][j + 1]], input) + input.serviceTimeByTruck[techTripList[i][j + 1]];
-            cusCompleteTime[techTripList[i][j + 1]] = tmp;
-            truckDemand[i] += input.demand[techTripList[i][j + 1]];
-        }
-
-        techCompleteTime[i] = tmp + input.techTimes[techTripList[i].back()][0];
-        techCompleteTime[i] = tmp + countTimeTruck(tmp , distances[techTripList[i].back()][0], input);
-        if (techCompleteTime[i] > allTechTime) {
-            allTechTime = techCompleteTime[i];
+        techCompleteTime[i] = tmp;
+        if (tmp > allTechTime){
+            allTechTime = tmp;
         }
     }
 
@@ -475,7 +488,7 @@ double Solution::getScore() { //them quay lai Kho
             eachTripDrone.push_back(0);
             eachTripDrone.insert(eachTripDrone.begin(), 0);
             overEnergyComplete[i][j] = totalTripEnergy(eachTripDrone, input) ;
-            totalDemand[i][j] = input.demand[droneTripList[i][j][0]];
+            totalDroneDemand[i][j] = input.demand[droneTripList[i][j][0]];
             
             tmp1 = input.droneTimes[0][droneTripList[i][j][0]] + input.serviceTimeByDrone[droneTripList[i][j][0]];
             cusCompleteTime[droneTripList[i][j][0]] = tmp1;
@@ -483,7 +496,7 @@ double Solution::getScore() { //them quay lai Kho
             for (int k = 0; k < (int) droneTripList[i][j].size() - 1; k++) {
                 tmp1 += (input.droneTimes[droneTripList[i][j][k]][droneTripList[i][j][k + 1]] + input.serviceTimeByDrone[droneTripList[i][j][k + 1]]);
                 cusCompleteTime[droneTripList[i][j][k + 1]] = tmp1;
-                totalDemand[i][j] += input.demand[droneTripList[i][j][k+1]];
+                totalDroneDemand[i][j] += input.demand[droneTripList[i][j][k+1]];
             }
             droneTripCompleteTime[i][j] = tmp1 + input.droneTimes[droneTripList[i][j].back()][0];
             tmp += droneTripCompleteTime[i][j];
@@ -496,15 +509,16 @@ double Solution::getScore() { //them quay lai Kho
 
     c = std::max(allDroneTime, allTechTime);
 
-    for (int i = 0; i < techTripList.size(); i++) {
-        if (techTripList[i].empty()) { continue; }
-        dz += std::max(0., truckDemand[i] - input.truckWeight_max);
-
-        for (int j: techTripList[i]) { 
-            cz += std::max(0., techCompleteTime[i] - cusCompleteTime[j] - config.sampleLimitationWaitingTime);
+    for(int i = 0; i < techTripList.size(); i++){
+        for(int j = 0; j < techTripList[i].size(); j++){
+            if(techTripList[i][j].empty()){
+                continue;
+            }
+            for(int k: techTripList[i][j]){
+                cz += std::max(0., truckTripCompleteTime[i][j] - cusCompleteTime[k] - config.sampleLimitationWaitingTime);
+            }
         }
     }
-
     for (int i = 0; i < droneTripList.size(); i++) {
         for (int j = 0; j < droneTripList[i].size(); j++) {
             if (droneTripList[i][j].empty()) {
@@ -520,13 +534,11 @@ double Solution::getScore() { //them quay lai Kho
         for (int j = 0; j < droneTripList[i].size(); j++){
             double overEnergydrone = (overEnergyComplete[i][j] - config.droneBatteryPower );
             ez += std::max(0., overEnergydrone);
-            double overWeight = (totalDemand[i][j] - config.droneCapacity);
+            double overWeight = (totalDroneDemand[i][j] - config.droneCapacity);
             dz += std::max(0., overWeight);
         }
         
     }
-
-
     return c + alpha1 * cz + alpha2 * dz + alpha3 * ez ;
 }
 
@@ -551,7 +563,7 @@ Solution *Solution::relocate(const std::vector<std::string> &tabuList, double be
     double baseScore = this->getScore();
     bool isImproved = false;
 
-    if (type != INTER) {
+    if (type != INTER) { 
         for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
             for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
                 for (int xIndex = 0; xIndex < droneTripList[droneIndex][tripIndex].size(); xIndex++) {
@@ -619,61 +631,61 @@ Solution *Solution::relocate(const std::vector<std::string> &tabuList, double be
         }
 
         for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-            for (int xIndex = 0; xIndex < techTripList[techIndex].size(); xIndex++) {
+            for(int tripIndex = 0; tripIndex < techTripList[techIndex].size(); tripIndex ++){
+                for (int xIndex = 0; xIndex < techTripList[techIndex].size(); xIndex++) {
+                    if (xIndex != 0) {
+                        Solution s = *this;
+                        s.techTripList[techIndex][tripIndex].insert(s.techTripList[techIndex][tripIndex].begin(),
+                                                        s.techTripList[techIndex][tripIndex][xIndex]);
 
-                if (xIndex != 0) {
-                    Solution s = *this;
 
-                    s.techTripList[techIndex].insert(s.techTripList[techIndex].begin(),
-                                                     s.techTripList[techIndex][xIndex]);
+                        s.techTripList[techIndex][tripIndex].erase(s.techTripList[techIndex][tripIndex].begin() + xIndex + 1);
 
+                        double newScore = s.getScore();
 
-                    s.techTripList[techIndex].erase(s.techTripList[techIndex].begin() + xIndex + 1);
-
-                    double newScore = s.getScore();
-
-                    if (newScore < curScore) {
-                        if (newScore < bestScore || (checkTabuCondition(tabuList, std::to_string(
-                                s.techTripList[techIndex][xIndex])) &&
-                                                     abs(newScore - baseScore) > config.tabuEpsilon)) {
-                            isImproved = true;
-                            bestSolution->droneTripList = s.droneTripList;
-                            bestSolution->techTripList = s.techTripList;
-                            bestSolution->ext["state"] = std::to_string(techTripList[techIndex][xIndex]);
-                            curScore = newScore;
+                        if (newScore < curScore) {
+                            if (newScore < bestScore || (checkTabuCondition(tabuList, std::to_string(
+                                    s.techTripList[techIndex][tripIndex][xIndex])) &&
+                                                        abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                isImproved = true;
+                                bestSolution->droneTripList = s.droneTripList;
+                                bestSolution->techTripList = s.techTripList;
+                                bestSolution->ext["state"] = std::to_string(techTripList[techIndex][tripIndex][xIndex]);
+                                curScore = newScore;
+                            }
                         }
                     }
-                }
 
-                for (int yIndex = 0; yIndex < techTripList[techIndex].size(); yIndex++) {
-                    if (yIndex == xIndex || yIndex == xIndex - 1) {
-                        continue;
-                    }
+                    for (int yIndex = 0; yIndex < techTripList[techIndex][tripIndex].size(); yIndex++) {
+                        if (yIndex == xIndex || yIndex == xIndex - 1) {
+                            continue;
+                        }
 
-                    Solution s = *this;
+                        Solution s = *this;
 
-                    s.techTripList[techIndex].insert(s.techTripList[techIndex].begin() + yIndex + 1,
-                                                     s.techTripList[techIndex][xIndex]);
+                        s.techTripList[techIndex][tripIndex].insert(s.techTripList[techIndex][tripIndex].begin() + yIndex + 1,
+                                                        s.techTripList[techIndex][tripIndex][xIndex]);
 
-                    if (xIndex < yIndex) {
-                        s.techTripList[techIndex].erase(
-                                s.techTripList[techIndex].begin() + xIndex);
-                    } else {
-                        s.techTripList[techIndex].erase(
-                                s.techTripList[techIndex].begin() + xIndex + 1);
-                    }
+                        if (xIndex < yIndex) {
+                            s.techTripList[techIndex][tripIndex].erase(
+                                    s.techTripList[techIndex][tripIndex].begin() + xIndex);
+                        } else {
+                            s.techTripList[techIndex][tripIndex].erase(
+                                    s.techTripList[techIndex][tripIndex].begin() + xIndex + 1);
+                        }
 
-                    double newScore = s.getScore();
+                        double newScore = s.getScore();
 
-                    if (newScore < curScore) {
-                        if (newScore < bestScore || (checkTabuCondition(tabuList, std::to_string(
-                                s.techTripList[techIndex][xIndex])) &&
-                                                     abs(newScore - baseScore) > config.tabuEpsilon)) {
-                            isImproved = true;
-                            bestSolution->droneTripList = s.droneTripList;
-                            bestSolution->techTripList = s.techTripList;
-                            bestSolution->ext["state"] = std::to_string(techTripList[techIndex][xIndex]);
-                            curScore = newScore;
+                        if (newScore < curScore) {
+                            if (newScore < bestScore || (checkTabuCondition(tabuList, std::to_string(
+                                    s.techTripList[techIndex][tripIndex][xIndex])) &&
+                                                        abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                isImproved = true;
+                                bestSolution->droneTripList = s.droneTripList;
+                                bestSolution->techTripList = s.techTripList;
+                                bestSolution->ext["state"] = std::to_string(techTripList[techIndex][tripIndex][xIndex]);
+                                curScore = newScore;
+                            }
                         }
                     }
                 }
@@ -742,55 +754,56 @@ Solution *Solution::relocate(const std::vector<std::string> &tabuList, double be
                                 }
                             }
                         }
+                        
                     }
 
                     //tech
                     for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-                        Solution s = *this;
-
-                        s.techTripList[techIndex].insert(s.techTripList[techIndex].begin(),
-                                                         s.droneTripList[droneIndex][tripIndex][xIndex]);
-
-                        s.droneTripList[droneIndex][tripIndex].erase(
-                                s.droneTripList[droneIndex][tripIndex].begin() + xIndex);
-
-                        double newScore = s.getScore();
-
-                        if (newScore < curScore) {
-                            if (newScore < bestScore || (checkTabuCondition(tabuList, std::to_string(
-                                    s.droneTripList[droneIndex][tripIndex][xIndex])) &&
-                                                         abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                isImproved = true;
-                                bestSolution->droneTripList = s.droneTripList;
-                                bestSolution->techTripList = s.techTripList;
-                                bestSolution->ext["state"] = std::to_string(
-                                        droneTripList[droneIndex][tripIndex][xIndex]);
-
-                                curScore = newScore;
-                            }
-                        }
-
-                        for (int yIndex = 0; yIndex < techTripList[techIndex].size(); yIndex++) {
-                            s = *this;
-
-                            s.techTripList[techIndex].insert(s.techTripList[techIndex].begin() + yIndex + 1,
-                                                             s.droneTripList[droneIndex][tripIndex][xIndex]);
+                        for(int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex ++){
+                            Solution s = *this;
+                            s.techTripList[techIndex][techTripIndex].insert(s.techTripList[techIndex][techTripIndex].begin(),
+                                                            s.droneTripList[droneIndex][tripIndex][xIndex]);
 
                             s.droneTripList[droneIndex][tripIndex].erase(
                                     s.droneTripList[droneIndex][tripIndex].begin() + xIndex);
 
-                            newScore = s.getScore();
+                            double newScore = s.getScore();
 
                             if (newScore < curScore) {
                                 if (newScore < bestScore || (checkTabuCondition(tabuList, std::to_string(
                                         s.droneTripList[droneIndex][tripIndex][xIndex])) &&
-                                                             abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                                            abs(newScore - baseScore) > config.tabuEpsilon)) {
                                     isImproved = true;
                                     bestSolution->droneTripList = s.droneTripList;
                                     bestSolution->techTripList = s.techTripList;
                                     bestSolution->ext["state"] = std::to_string(
                                             droneTripList[droneIndex][tripIndex][xIndex]);
+
                                     curScore = newScore;
+                                }
+                            }  
+                            for (int yIndex = 0; yIndex < techTripList[techIndex][techTripIndex].size(); yIndex++) {
+                                s = *this;
+
+                                s.techTripList[techIndex][techTripIndex].insert(s.techTripList[techIndex][techTripIndex].begin() + yIndex + 1,
+                                                                s.droneTripList[droneIndex][tripIndex][xIndex]);
+
+                                s.droneTripList[droneIndex][tripIndex].erase(
+                                        s.droneTripList[droneIndex][tripIndex].begin() + xIndex);
+
+                                newScore = s.getScore();
+
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, std::to_string(
+                                            s.droneTripList[droneIndex][tripIndex][xIndex])) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = std::to_string(
+                                                droneTripList[droneIndex][tripIndex][xIndex]);
+                                        curScore = newScore;
+                                    }
                                 }
                             }
                         }
@@ -800,124 +813,131 @@ Solution *Solution::relocate(const std::vector<std::string> &tabuList, double be
         }
 
         for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-            for (int xIndex = 0; xIndex < techTripList[techIndex].size(); xIndex++) {
+            for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex ++){
+                for (int xIndex = 0; xIndex < techTripList[techIndex][techTripIndex].size(); xIndex++) {
 
-                // tech
-                for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
-                    if (techIndex == techIndex2) {
-                        continue;
-                    }
-
-                    Solution s = *this;
-
-                    s.techTripList[techIndex2].insert(s.techTripList[techIndex2].begin(),
-                                                      s.techTripList[techIndex][xIndex]);
-
-                    s.techTripList[techIndex].erase(
-                            s.techTripList[techIndex].begin() + xIndex);
-
-
-                    double newScore = s.getScore();
-
-                    if (newScore < curScore) {
-                        if (newScore < bestScore || (checkTabuCondition(tabuList, std::to_string(
-                                s.techTripList[techIndex][xIndex])) &&
-                                                     abs(newScore - baseScore) > config.tabuEpsilon)) {
-                            isImproved = true;
-                            bestSolution->droneTripList = s.droneTripList;
-                            bestSolution->techTripList = s.techTripList;
-                            bestSolution->ext["state"] = std::to_string(techTripList[techIndex][xIndex]);
-                            curScore = newScore;
-                        }
-                    }
-
-                    for (int yIndex = 0; yIndex < techTripList[techIndex2].size(); yIndex++) {
-                        Solution s = *this;
-
-                        s.techTripList[techIndex2].insert(s.techTripList[techIndex2].begin() + yIndex + 1,
-                                                          s.techTripList[techIndex][xIndex]);
-
-                        s.techTripList[techIndex].erase(
-                                s.techTripList[techIndex].begin() + xIndex);
-
-
-                        double newScore = s.getScore();
-
-                        if (newScore < curScore) {
-                            if (newScore < bestScore || (checkTabuCondition(tabuList, std::to_string(
-                                    s.techTripList[techIndex][xIndex])) &&
-                                                         abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                isImproved = true;
-                                bestSolution->droneTripList = s.droneTripList;
-                                bestSolution->techTripList = s.techTripList;
-                                bestSolution->ext["state"] = std::to_string(techTripList[techIndex][xIndex]);
-                                curScore = newScore;
+                    // tech
+                    for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
+                        for (int techTripIndex2 = 0; techTripIndex2 < techTripList[techIndex2].size(); techTripIndex2++){
+                            if (techIndex == techIndex2 && techTripIndex == techTripIndex2) {
+                                continue;
                             }
-                        }
-                    }
-                }
 
-                // drone
-                if (input.cusOnlyServedByTech[techTripList[techIndex][xIndex]]) {
-                    continue;
-                }
-
-                for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
-                    for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
-                        Solution s = *this;
-
-                        s.droneTripList[droneIndex][tripIndex].insert(
-                                s.droneTripList[droneIndex][tripIndex].begin(),
-                                s.techTripList[techIndex][xIndex]);
-
-                        s.techTripList[techIndex].erase(
-                                s.techTripList[techIndex].begin() + xIndex);
-
-
-                        double newScore = s.getScore();
-
-                        if (newScore < curScore) {
-                            if (newScore < bestScore || (checkTabuCondition(tabuList, std::to_string(
-                                    s.techTripList[techIndex][xIndex])) &&
-                                                         abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                isImproved = true;
-                                bestSolution->droneTripList = s.droneTripList;
-                                bestSolution->techTripList = s.techTripList;
-                                bestSolution->ext["state"] = std::to_string(techTripList[techIndex][xIndex]);
-                                curScore = newScore;
-                            }
-                        }
-
-                        for (int yIndex = 0; yIndex < droneTripList[droneIndex][tripIndex].size(); yIndex++) {
                             Solution s = *this;
 
-                            s.droneTripList[droneIndex][tripIndex].insert(
-                                    s.droneTripList[droneIndex][tripIndex].begin() + yIndex + 1,
-                                    s.techTripList[techIndex][xIndex]);
+                            s.techTripList[techIndex2][techTripIndex2].insert(s.techTripList[techIndex2][techTripIndex2].begin(),
+                                                            s.techTripList[techIndex][techTripIndex][xIndex]);
 
-                            s.techTripList[techIndex].erase(
-                                    s.techTripList[techIndex].begin() + xIndex);
+                            s.techTripList[techIndex][techTripIndex].erase(
+                                    s.techTripList[techIndex][techTripIndex].begin() + xIndex);
 
 
                             double newScore = s.getScore();
 
                             if (newScore < curScore) {
                                 if (newScore < bestScore || (checkTabuCondition(tabuList, std::to_string(
-                                        s.techTripList[techIndex][xIndex])) &&
-                                                             abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        s.techTripList[techIndex][techTripIndex][xIndex])) &&
+                                                            abs(newScore - baseScore) > config.tabuEpsilon)) {
                                     isImproved = true;
                                     bestSolution->droneTripList = s.droneTripList;
                                     bestSolution->techTripList = s.techTripList;
-                                    bestSolution->ext["state"] = std::to_string(techTripList[techIndex][xIndex]);
+                                    bestSolution->ext["state"] = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
                                     curScore = newScore;
+                                }
+                            }
+                            
+                            for (int yIndex = 0; yIndex < techTripList[techIndex2][techTripIndex2].size(); yIndex++) {
+                                Solution s = *this;
+
+                                s.techTripList[techIndex2][techTripIndex2].insert(s.techTripList[techIndex2][techTripIndex2].begin() + yIndex + 1,
+                                                                s.techTripList[techIndex][techTripIndex][xIndex]);
+
+                                s.techTripList[techIndex][techTripIndex].erase(
+                                        s.techTripList[techIndex][techTripIndex].begin() + xIndex);
+
+
+                                double newScore = s.getScore();
+
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, std::to_string(
+                                            s.techTripList[techIndex][techTripIndex][xIndex])) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                                        curScore = newScore;
+                                    }
                                 }
                             }
                         }
                     }
+
+                    // drone
+                    if (input.cusOnlyServedByTech[techTripList[techIndex][techTripIndex][xIndex]]) {
+                        continue;
+                    }
+
+                    for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
+                        for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
+                            Solution s = *this;
+
+                            s.droneTripList[droneIndex][tripIndex].insert(
+                                    s.droneTripList[droneIndex][tripIndex].begin(),
+                                    s.techTripList[techIndex][techTripIndex][xIndex]);
+
+                            s.techTripList[techIndex][techTripIndex].erase(
+                                    s.techTripList[techIndex][techTripIndex].begin() + xIndex);
+
+
+                            double newScore = s.getScore();
+
+                            if (newScore < curScore) {
+                                if (newScore < bestScore || (checkTabuCondition(tabuList, std::to_string(
+                                        s.techTripList[techIndex][techTripIndex][xIndex])) &&
+                                                            abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                    isImproved = true;
+                                    bestSolution->droneTripList = s.droneTripList;
+                                    bestSolution->techTripList = s.techTripList;
+                                    bestSolution->ext["state"] = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                                    curScore = newScore;
+                                }
+                            }
+
+                            for (int yIndex = 0; yIndex < droneTripList[droneIndex][tripIndex].size(); yIndex++) {
+                                Solution s = *this;
+
+                                s.droneTripList[droneIndex][tripIndex].insert(
+                                        s.droneTripList[droneIndex][tripIndex].begin() + yIndex + 1,
+                                        s.techTripList[techIndex][techTripIndex][xIndex]);
+
+                                s.techTripList[techIndex][techTripIndex].erase(
+                                        s.techTripList[techIndex][techTripIndex].begin() + xIndex);
+
+
+                                double newScore = s.getScore();
+
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, std::to_string(
+                                            s.techTripList[techIndex][techTripIndex][xIndex])) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                                        curScore = newScore;
+                                    }
+                                }
+                            }
+                        }
+                        
+                    }
                 }
             }
         }
+
     }
+    // std::cout <<"Run relocate 2" <<"\n";
 
     if (isImproved) {
         return bestSolution;
@@ -931,7 +951,6 @@ Solution *Solution::exchange(const std::vector<std::string> &tabuList, double be
     double curScore = std::numeric_limits<double>::max();
     double baseScore = this->getScore();
     bool isImproved = false;
-
     if (type != INTRA) {
         for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
             for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
@@ -971,28 +990,30 @@ Solution *Solution::exchange(const std::vector<std::string> &tabuList, double be
 
                     //tech
                     for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-                        for (int yIndex = 0; yIndex < techTripList[techIndex].size(); yIndex++) {
-                            Solution s = *this;
+                        for(int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+                            for (int yIndex = 0; yIndex < techTripList[techIndex][techTripIndex].size(); yIndex++) {
+                                Solution s = *this;
 
-                            std::swap(s.droneTripList[droneIndex][tripIndex][xIndex],
-                                      s.techTripList[techIndex][yIndex]);
+                                std::swap(s.droneTripList[droneIndex][tripIndex][xIndex],
+                                        s.techTripList[techIndex][techTripIndex][yIndex]);
 
-                            double newScore = s.getScore();
+                                double newScore = s.getScore();
 
-                            std::string val1 = std::to_string(droneTripList[droneIndex][tripIndex][xIndex]);
-                            std::string val2 = std::to_string(techTripList[techIndex][yIndex]);
+                                std::string val1 = std::to_string(droneTripList[droneIndex][tripIndex][xIndex]);
+                                std::string val2 = std::to_string(techTripList[techIndex][techTripIndex][yIndex]);
 
-                            if (newScore < curScore) {
-                                if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                             abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                    isImproved = true;
-                                    bestSolution->droneTripList = s.droneTripList;
-                                    bestSolution->techTripList = s.techTripList;
-                                    bestSolution->ext["state"] = "";
-                                    bestSolution->ext["state"] += val1;
-                                    bestSolution->ext["state"] += "-";
-                                    bestSolution->ext["state"] += val2;
-                                    curScore = newScore;
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = "";
+                                        bestSolution->ext["state"] += val1;
+                                        bestSolution->ext["state"] += "-";
+                                        bestSolution->ext["state"] += val2;
+                                        curScore = newScore;
+                                    }
                                 }
                             }
                         }
@@ -1002,68 +1023,73 @@ Solution *Solution::exchange(const std::vector<std::string> &tabuList, double be
         }
 
         for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-            for (int xIndex = 0; xIndex < techTripList[techIndex].size(); xIndex++) {
+            for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+                for (int xIndex = 0; xIndex < techTripList[techIndex][techTripIndex].size(); xIndex++) {
 
-                // tech
-                for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
-                    if (techIndex == techIndex2) {
-                        continue;
-                    }
-                    for (int yIndex = 0; yIndex < techTripList[techIndex2].size(); yIndex++) {
-                        Solution s = *this;
+                    // tech
+                    for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
+                        for (int techTripIndex2 = 0; techTripIndex2 < techTripList[techIndex2].size(); techTripIndex2++){    
+                            if (techIndex == techIndex2 && techTripIndex == techTripIndex2) {
+                                continue;
+                            }
+                        
+                            for (int yIndex = 0; yIndex < techTripList[techIndex2][techTripIndex2].size(); yIndex++) {
+                                Solution s = *this;
 
-                        std::swap(s.techTripList[techIndex][xIndex], s.techTripList[techIndex2][yIndex]);
+                                std::swap(s.techTripList[techIndex][techTripIndex][xIndex], s.techTripList[techIndex2][techTripIndex2][yIndex]);
 
-                        double newScore = s.getScore();
+                                double newScore = s.getScore();
 
-                        std::string val1 = std::to_string(techTripList[techIndex][xIndex]);
-                        std::string val2 = std::to_string(techTripList[techIndex2][yIndex]);
+                                std::string val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                                std::string val2 = std::to_string(techTripList[techIndex2][techTripIndex2][yIndex]);
 
-                        if (newScore < curScore) {
-                            if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                         abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                isImproved = true;
-                                bestSolution->droneTripList = s.droneTripList;
-                                bestSolution->techTripList = s.techTripList;
-                                bestSolution->ext["state"] = "";
-                                bestSolution->ext["state"] += val1;
-                                bestSolution->ext["state"] += "-";
-                                bestSolution->ext["state"] += val2;
-                                curScore = newScore;
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = "";
+                                        bestSolution->ext["state"] += val1;
+                                        bestSolution->ext["state"] += "-";
+                                        bestSolution->ext["state"] += val2;
+                                        curScore = newScore;
+                                    }
+                                }
                             }
                         }
                     }
-                }
 
-                // drone
-                if (input.cusOnlyServedByTech[techTripList[techIndex][xIndex]]) {
-                    continue;
-                }
+                    // drone
+                    if (input.cusOnlyServedByTech[techTripList[techIndex][techTripIndex][xIndex]]) {
+                        continue;
+                    }
 
-                for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
-                    for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
-                        for (int yIndex = 0; yIndex < droneTripList[droneIndex][tripIndex].size(); yIndex++) {
-                            Solution s = *this;
+                    for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
+                        for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
+                            for (int yIndex = 0; yIndex < droneTripList[droneIndex][tripIndex].size(); yIndex++) {
+                                Solution s = *this;
 
-                            std::swap(s.techTripList[techIndex][xIndex],
-                                      s.droneTripList[droneIndex][tripIndex][yIndex]);
+                                std::swap(s.techTripList[techIndex][techTripIndex][xIndex],
+                                        s.droneTripList[droneIndex][tripIndex][yIndex]);
 
-                            double newScore = s.getScore();
+                                double newScore = s.getScore();
 
-                            std::string val1 = std::to_string(techTripList[techIndex][xIndex]);
-                            std::string val2 = std::to_string(droneTripList[droneIndex][tripIndex][yIndex]);
+                                std::string val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                                std::string val2 = std::to_string(droneTripList[droneIndex][tripIndex][yIndex]);
 
-                            if (newScore < curScore) {
-                                if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                             abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                    isImproved = true;
-                                    bestSolution->droneTripList = s.droneTripList;
-                                    bestSolution->techTripList = s.techTripList;
-                                    bestSolution->ext["state"] = "";
-                                    bestSolution->ext["state"] += val1;
-                                    bestSolution->ext["state"] += "-";
-                                    bestSolution->ext["state"] += val2;
-                                    curScore = newScore;
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = "";
+                                        bestSolution->ext["state"] += val1;
+                                        bestSolution->ext["state"] += "-";
+                                        bestSolution->ext["state"] += val2;
+                                        curScore = newScore;
+                                    }
                                 }
                             }
                         }
@@ -1106,28 +1132,30 @@ Solution *Solution::exchange(const std::vector<std::string> &tabuList, double be
         }
 
         for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-            for (int xIndex = 0; xIndex < (int) techTripList[techIndex].size() - 1; xIndex++) {
-                for (int yIndex = xIndex + 1; yIndex < techTripList[techIndex].size(); yIndex++) {
-                    Solution s = *this;
+            for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+                for (int xIndex = 0; xIndex < (int) techTripList[techIndex][techTripIndex].size() - 1; xIndex++) {
+                    for (int yIndex = xIndex + 1; yIndex < techTripList[techIndex][techTripIndex].size(); yIndex++) {
+                        Solution s = *this;
 
-                    std::swap(s.techTripList[techIndex][xIndex],
-                              s.techTripList[techIndex][yIndex]);
+                        std::swap(s.techTripList[techIndex][techTripIndex][xIndex],
+                                s.techTripList[techIndex][techTripIndex][yIndex]);
 
-                    double newScore = s.getScore();
-                    std::string val1 = std::to_string(techTripList[techIndex][xIndex]);
-                    std::string val2 = std::to_string(techTripList[techIndex][yIndex]);
+                        double newScore = s.getScore();
+                        std::string val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                        std::string val2 = std::to_string(techTripList[techIndex][techTripIndex][yIndex]);
 
-                    if (newScore < curScore) {
-                        if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                     abs(newScore - baseScore) > config.tabuEpsilon)) {
-                            isImproved = true;
-                            bestSolution->droneTripList = s.droneTripList;
-                            bestSolution->techTripList = s.techTripList;
-                            bestSolution->ext["state"] = "";
-                            bestSolution->ext["state"] += val1;
-                            bestSolution->ext["state"] += "-";
-                            bestSolution->ext["state"] += val2;
-                            curScore = newScore;
+                        if (newScore < curScore) {
+                            if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                        abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                isImproved = true;
+                                bestSolution->droneTripList = s.droneTripList;
+                                bestSolution->techTripList = s.techTripList;
+                                bestSolution->ext["state"] = "";
+                                bestSolution->ext["state"] += val1;
+                                bestSolution->ext["state"] += "-";
+                                bestSolution->ext["state"] += val2;
+                                curScore = newScore;
+                            }
                         }
                     }
                 }
@@ -1141,6 +1169,8 @@ Solution *Solution::exchange(const std::vector<std::string> &tabuList, double be
         return nullptr;
     }
 }
+
+//fix complete
 
 bool Solution::checkTabuCondition(const std::vector<std::string> &tabuList, const std::string &val) {
     if (tabuList.empty()) {
@@ -1266,53 +1296,25 @@ Solution *Solution::orOpt(const std::vector<std::string> &tabuList, double bestS
 
                     // tech
                     for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-                        Solution s = *this;
+                        for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+                            Solution s = *this;
 
-                        for (int i = dis; i >= 0; i--) {
-                            s.techTripList[techIndex].insert(
-                                    s.techTripList[techIndex].begin(),
-                                    droneTripList[droneIndex][tripIndex][xIndex + i]);
-
-                            s.droneTripList[droneIndex][tripIndex].erase(
-                                    s.droneTripList[droneIndex][tripIndex].begin() + xIndex + i);
-                        }
-
-                        double newScore = s.getScore();
-
-                        std::string val1 = std::to_string(droneTripList[droneIndex][tripIndex][xIndex]);
-                        std::string val2 = std::to_string(droneTripList[droneIndex][tripIndex][xIndex + dis]);
-                        if (newScore < curScore) {
-                            if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                         abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                isImproved = true;
-                                bestSolution->droneTripList = s.droneTripList;
-                                bestSolution->techTripList = s.techTripList;
-                                bestSolution->ext["state"] = "";
-                                bestSolution->ext["state"] += val1;
-                                bestSolution->ext["state"] += "-";
-                                bestSolution->ext["state"] += val2;
-                                curScore = newScore;
-                            }
-                        }
-
-                        for (int yIndex = 0; yIndex < techTripList[techIndex].size(); yIndex++) {
-                            s = *this;
-                            for (int i = 0; i <= dis; i++) {
-                                s.techTripList[techIndex].insert(
-                                        s.techTripList[techIndex].begin() + yIndex + i + 1,
+                            for (int i = dis; i >= 0; i--) {
+                                s.techTripList[techIndex][techTripIndex].insert(
+                                        s.techTripList[techIndex][techTripIndex].begin(),
                                         droneTripList[droneIndex][tripIndex][xIndex + i]);
 
                                 s.droneTripList[droneIndex][tripIndex].erase(
-                                        s.droneTripList[droneIndex][tripIndex].begin() + xIndex);
+                                        s.droneTripList[droneIndex][tripIndex].begin() + xIndex + i);
                             }
 
-                            newScore = s.getScore();
+                            double newScore = s.getScore();
 
-                            val1 = std::to_string(droneTripList[droneIndex][tripIndex][xIndex]);
-                            val2 = std::to_string(droneTripList[droneIndex][tripIndex][xIndex + dis]);
+                            std::string val1 = std::to_string(droneTripList[droneIndex][tripIndex][xIndex]);
+                            std::string val2 = std::to_string(droneTripList[droneIndex][tripIndex][xIndex + dis]);
                             if (newScore < curScore) {
                                 if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                             abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                                            abs(newScore - baseScore) > config.tabuEpsilon)) {
                                     isImproved = true;
                                     bestSolution->droneTripList = s.droneTripList;
                                     bestSolution->techTripList = s.techTripList;
@@ -1323,6 +1325,36 @@ Solution *Solution::orOpt(const std::vector<std::string> &tabuList, double bestS
                                     curScore = newScore;
                                 }
                             }
+
+                            for (int yIndex = 0; yIndex < techTripList[techIndex][techTripIndex].size(); yIndex++) {
+                                s = *this;
+                                for (int i = 0; i <= dis; i++) {
+                                    s.techTripList[techIndex][techTripIndex].insert(
+                                            s.techTripList[techIndex][techTripIndex].begin() + yIndex + i + 1,
+                                            droneTripList[droneIndex][tripIndex][xIndex + i]);
+
+                                    s.droneTripList[droneIndex][tripIndex].erase(
+                                            s.droneTripList[droneIndex][tripIndex].begin() + xIndex);
+                                }
+
+                                newScore = s.getScore();
+
+                                val1 = std::to_string(droneTripList[droneIndex][tripIndex][xIndex]);
+                                val2 = std::to_string(droneTripList[droneIndex][tripIndex][xIndex + dis]);
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = "";
+                                        bestSolution->ext["state"] += val1;
+                                        bestSolution->ext["state"] += "-";
+                                        bestSolution->ext["state"] += val2;
+                                        curScore = newScore;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1330,135 +1362,35 @@ Solution *Solution::orOpt(const std::vector<std::string> &tabuList, double bestS
         }
 
         for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-            if (techTripList[techIndex].size() <= dis) {
-                continue;
-            }
-            for (int xIndex = 0; xIndex < (int) techTripList[techIndex].size() - dis; xIndex++) {
-                //tech
-                for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
-                    if (techIndex == techIndex2) {
-                        continue;
-                    }
-
-                    Solution s = *this;
-                    for (int i = dis; i >= 0; i--) {
-                        s.techTripList[techIndex2].insert(
-                                s.techTripList[techIndex2].begin(),
-                                techTripList[techIndex][xIndex + i]);
-
-                        s.techTripList[techIndex].erase(
-                                s.techTripList[techIndex].begin() + xIndex + i);
-                    }
-
-                    double newScore = s.getScore();
-
-                    std::string val1 = std::to_string(techTripList[techIndex][xIndex]);
-                    std::string val2 = std::to_string(techTripList[techIndex][xIndex + dis]);
-                    if (newScore < curScore) {
-                        if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                     abs(newScore - baseScore) > config.tabuEpsilon)) {
-                            isImproved = true;
-                            bestSolution->droneTripList = s.droneTripList;
-                            bestSolution->techTripList = s.techTripList;
-                            bestSolution->ext["state"] = "";
-                            bestSolution->ext["state"] += val1;
-                            bestSolution->ext["state"] += "-";
-                            bestSolution->ext["state"] += val2;
-                            curScore = newScore;
-                        }
-                    }
-
-                    for (int yIndex = 0; yIndex < techTripList[techIndex2].size(); yIndex++) {
-                        s = *this;
-                        for (int i = 0; i <= dis; i++) {
-                            s.techTripList[techIndex2].insert(
-                                    s.techTripList[techIndex2].begin() + yIndex + i + 1,
-                                    techTripList[techIndex][xIndex + i]);
-
-                            s.techTripList[techIndex].erase(
-                                    s.techTripList[techIndex].begin() + xIndex);
-                        }
-
-                        newScore = s.getScore();
-
-                        val1 = std::to_string(techTripList[techIndex][xIndex]);
-                        val2 = std::to_string(techTripList[techIndex][xIndex + dis]);
-                        if (newScore < curScore) {
-                            if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                         abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                isImproved = true;
-                                bestSolution->droneTripList = s.droneTripList;
-                                bestSolution->techTripList = s.techTripList;
-                                bestSolution->ext["state"] = "";
-                                bestSolution->ext["state"] += val1;
-                                bestSolution->ext["state"] += "-";
-                                bestSolution->ext["state"] += val2;
-                                curScore = newScore;
-                            }
-                        }
-                    }
-                }
-
-                //drone
-                bool canMoveToDroneTrip = true;
-                for (int i = xIndex; i < xIndex + dis; i++) {
-                    if (input.cusOnlyServedByTech[techTripList[techIndex][i]]) {
-                        canMoveToDroneTrip = false;
-                        break;
-                    }
-                }
-                if (!canMoveToDroneTrip) {
+            for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+                if (techTripList[techIndex][techTripIndex].size() <= dis) {
                     continue;
                 }
-
-                for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
-                    for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
-                        Solution s = *this;
-
-                        for (int i = dis; i >= 0; i--) {
-                            s.droneTripList[droneIndex][tripIndex].insert(
-                                    s.droneTripList[droneIndex][tripIndex].begin(),
-                                    techTripList[techIndex][xIndex + i]);
-
-                            s.techTripList[techIndex].erase(
-                                    s.techTripList[techIndex].begin() + xIndex + i);
-                        }
-
-                        double newScore = s.getScore();
-
-                        std::string val1 = std::to_string(techTripList[techIndex][xIndex]);
-                        std::string val2 = std::to_string(techTripList[techIndex][xIndex + dis]);
-                        if (newScore < curScore) {
-                            if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                         abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                isImproved = true;
-                                bestSolution->droneTripList = s.droneTripList;
-                                bestSolution->techTripList = s.techTripList;
-                                bestSolution->ext["state"] = "";
-                                bestSolution->ext["state"] += val1;
-                                bestSolution->ext["state"] += "-";
-                                bestSolution->ext["state"] += val2;
-                                curScore = newScore;
-                            }
-                        }
-                        for (int yIndex = 0; yIndex < droneTripList[droneIndex][tripIndex].size(); yIndex++) {
-                            s = *this;
-                            for (int i = 0; i <= dis; i++) {
-                                s.droneTripList[droneIndex][tripIndex].insert(
-                                        s.droneTripList[droneIndex][tripIndex].begin() + yIndex + i + 1,
-                                        techTripList[techIndex][xIndex + i]);
-
-                                s.techTripList[techIndex].erase(
-                                        s.techTripList[techIndex].begin() + xIndex);
+                for (int xIndex = 0; xIndex < (int) techTripList[techIndex][techTripIndex].size() - dis; xIndex++) {
+                    //tech
+                    for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
+                        for (int techTripIndex2 = 0; techTripIndex2 < techTripList[techIndex2].size(); techTripIndex2++){
+                            if (techIndex == techIndex2 && techTripIndex == techTripIndex2) {
+                                continue;
                             }
 
-                            newScore = s.getScore();
+                            Solution s = *this;
+                            for (int i = dis; i >= 0; i--) {
+                                s.techTripList[techIndex2][techTripIndex2].insert(
+                                        s.techTripList[techIndex2][techTripIndex2].begin(),
+                                        techTripList[techIndex][techTripIndex][xIndex + i]);
 
-                            val1 = std::to_string(techTripList[techIndex][xIndex]);
-                            val2 = std::to_string(techTripList[techIndex][xIndex + dis]);
+                                s.techTripList[techIndex][techTripIndex].erase(
+                                        s.techTripList[techIndex][techTripIndex].begin() + xIndex + i);
+                            }
+
+                            double newScore = s.getScore();
+
+                            std::string val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                            std::string val2 = std::to_string(techTripList[techIndex][techTripIndex][xIndex + dis]);
                             if (newScore < curScore) {
                                 if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                             abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                                            abs(newScore - baseScore) > config.tabuEpsilon)) {
                                     isImproved = true;
                                     bestSolution->droneTripList = s.droneTripList;
                                     bestSolution->techTripList = s.techTripList;
@@ -1467,6 +1399,110 @@ Solution *Solution::orOpt(const std::vector<std::string> &tabuList, double bestS
                                     bestSolution->ext["state"] += "-";
                                     bestSolution->ext["state"] += val2;
                                     curScore = newScore;
+                                }
+                            }
+
+                            for (int yIndex = 0; yIndex < techTripList[techIndex2][techTripIndex2].size(); yIndex++) {
+                                s = *this;
+                                for (int i = 0; i <= dis; i++) {
+                                    s.techTripList[techIndex2][techTripIndex2].insert(
+                                            s.techTripList[techIndex2][techTripIndex2].begin() + yIndex + i + 1,
+                                            techTripList[techIndex][techTripIndex][xIndex + i]);
+
+                                    s.techTripList[techIndex][techTripIndex].erase(
+                                            s.techTripList[techIndex][techTripIndex].begin() + xIndex);
+                                }
+
+                                newScore = s.getScore();
+
+                                val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                                val2 = std::to_string(techTripList[techIndex][techTripIndex][xIndex + dis]);
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = "";
+                                        bestSolution->ext["state"] += val1;
+                                        bestSolution->ext["state"] += "-";
+                                        bestSolution->ext["state"] += val2;
+                                        curScore = newScore;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    //drone
+                    bool canMoveToDroneTrip = true;
+                    for (int i = xIndex; i < xIndex + dis; i++) {
+                        if (input.cusOnlyServedByTech[techTripList[techIndex][techTripIndex][i]]) {
+                            canMoveToDroneTrip = false;
+                            break;
+                        }
+                    }
+                    if (!canMoveToDroneTrip) {
+                        continue;
+                    }
+
+                    for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
+                        for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
+                            Solution s = *this;
+
+                            for (int i = dis; i >= 0; i--) {
+                                s.droneTripList[droneIndex][tripIndex].insert(
+                                        s.droneTripList[droneIndex][tripIndex].begin(),
+                                        techTripList[techIndex][techTripIndex][xIndex + i]);
+
+                                s.techTripList[techIndex][techTripIndex].erase(
+                                        s.techTripList[techIndex][techTripIndex].begin() + xIndex + i);
+                            }
+
+                            double newScore = s.getScore();
+
+                            std::string val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                            std::string val2 = std::to_string(techTripList[techIndex][techTripIndex][xIndex + dis]);
+                            if (newScore < curScore) {
+                                if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                            abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                    isImproved = true;
+                                    bestSolution->droneTripList = s.droneTripList;
+                                    bestSolution->techTripList = s.techTripList;
+                                    bestSolution->ext["state"] = "";
+                                    bestSolution->ext["state"] += val1;
+                                    bestSolution->ext["state"] += "-";
+                                    bestSolution->ext["state"] += val2;
+                                    curScore = newScore;
+                                }
+                            }
+                            for (int yIndex = 0; yIndex < droneTripList[droneIndex][tripIndex].size(); yIndex++) {
+                                s = *this;
+                                for (int i = 0; i <= dis; i++) {
+                                    s.droneTripList[droneIndex][tripIndex].insert(
+                                            s.droneTripList[droneIndex][tripIndex].begin() + yIndex + i + 1,
+                                            techTripList[techIndex][techTripIndex][xIndex + i]);
+
+                                    s.techTripList[techIndex][techTripIndex].erase(
+                                            s.techTripList[techIndex][techTripIndex].begin() + xIndex);
+                                }
+
+                                newScore = s.getScore();
+
+                                val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                                val2 = std::to_string(techTripList[techIndex][techTripIndex][xIndex + dis]);
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = "";
+                                        bestSolution->ext["state"] += val1;
+                                        bestSolution->ext["state"] += "-";
+                                        bestSolution->ext["state"] += val2;
+                                        curScore = newScore;
+                                    }
                                 }
                             }
                         }
@@ -1558,76 +1594,78 @@ Solution *Solution::orOpt(const std::vector<std::string> &tabuList, double bestS
         }
 
         for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-            if (techTripList[techIndex].size() <= dis) {
-                continue;
-            }
-            for (int xIndex = 0; xIndex < (int) techTripList[techIndex].size() - dis; xIndex++) {
-                if (xIndex != 0) {
-                    Solution s = *this;
-                    for (int i = dis; i >= 0; i--) {
-                        s.techTripList[techIndex].insert(
-                                s.techTripList[techIndex].begin(),
-                                techTripList[techIndex][xIndex + i]);
-
-                        s.techTripList[techIndex].erase(
-                                s.techTripList[techIndex].begin() + xIndex + dis + 1);
-                    }
-
-                    double newScore = s.getScore();
-
-                    std::string val1 = std::to_string(techTripList[techIndex][xIndex]);
-                    std::string val2 = std::to_string(techTripList[techIndex][xIndex + dis]);
-                    if (newScore < curScore) {
-                        if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                     abs(newScore - baseScore) > config.tabuEpsilon)) {
-                            isImproved = true;
-                            bestSolution->droneTripList = s.droneTripList;
-                            bestSolution->techTripList = s.techTripList;
-                            bestSolution->ext["state"] = "";
-                            bestSolution->ext["state"] += val1;
-                            bestSolution->ext["state"] += "-";
-                            bestSolution->ext["state"] += val2;
-                            curScore = newScore;
-                        }
-                    }
+            for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+                if (techTripList[techIndex].size() <= dis) {
+                    continue;
                 }
+                for (int xIndex = 0; xIndex < (int) techTripList[techIndex][techTripIndex].size() - dis; xIndex++) {
+                    if (xIndex != 0) {
+                        Solution s = *this;
+                        for (int i = dis; i >= 0; i--) {
+                            s.techTripList[techIndex][techTripIndex].insert(
+                                    s.techTripList[techIndex][techTripIndex].begin(),
+                                    techTripList[techIndex][techTripIndex][xIndex + i]);
 
-                for (int yIndex = 0; yIndex < techTripList[techIndex].size(); yIndex++) {
-                    if (yIndex == xIndex || (yIndex < xIndex && yIndex + dis >= xIndex)) {
-                        continue;
-                    }
+                            s.techTripList[techIndex][techTripIndex].erase(
+                                    s.techTripList[techIndex][techTripIndex].begin() + xIndex + dis + 1);
+                        }
 
-                    Solution s = *this;
-                    for (int i = 0; i <= dis; i++) {
-                        s.techTripList[techIndex].insert(
-                                s.techTripList[techIndex].begin() + yIndex + i + 1,
-                                techTripList[techIndex][xIndex + i]);
-                    }
+                        double newScore = s.getScore();
 
-                    for (int i = 0; i <= dis; i++) {
-                        if (xIndex < yIndex) {
-                            s.techTripList[techIndex].erase(
-                                    s.techTripList[techIndex].begin() + xIndex);
-                        } else {
-                            s.techTripList[techIndex].erase(
-                                    s.techTripList[techIndex].begin() + xIndex + dis + 1);
+                        std::string val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                        std::string val2 = std::to_string(techTripList[techIndex][techTripIndex][xIndex + dis]);
+                        if (newScore < curScore) {
+                            if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                        abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                isImproved = true;
+                                bestSolution->droneTripList = s.droneTripList;
+                                bestSolution->techTripList = s.techTripList;
+                                bestSolution->ext["state"] = "";
+                                bestSolution->ext["state"] += val1;
+                                bestSolution->ext["state"] += "-";
+                                bestSolution->ext["state"] += val2;
+                                curScore = newScore;
+                            }
                         }
                     }
-                    double newScore = s.getScore();
 
-                    std::string val1 = std::to_string(techTripList[techIndex][xIndex]);
-                    std::string val2 = std::to_string(techTripList[techIndex][xIndex + dis]);
-                    if (newScore < curScore) {
-                        if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                     abs(newScore - baseScore) > config.tabuEpsilon)) {
-                            isImproved = true;
-                            bestSolution->droneTripList = s.droneTripList;
-                            bestSolution->techTripList = s.techTripList;
-                            bestSolution->ext["state"] = "";
-                            bestSolution->ext["state"] += val1;
-                            bestSolution->ext["state"] += "-";
-                            bestSolution->ext["state"] += val2;
-                            curScore = newScore;
+                    for (int yIndex = 0; yIndex < techTripList[techIndex][techTripIndex].size(); yIndex++) {
+                        if (yIndex == xIndex || (yIndex < xIndex && yIndex + dis >= xIndex)) {
+                            continue;
+                        }
+
+                        Solution s = *this;
+                        for (int i = 0; i <= dis; i++) {
+                            s.techTripList[techIndex][techTripIndex].insert(
+                                    s.techTripList[techIndex][techTripIndex].begin() + yIndex + i + 1,
+                                    techTripList[techIndex][techTripIndex][xIndex + i]);
+                        }
+
+                        for (int i = 0; i <= dis; i++) {
+                            if (xIndex < yIndex) {
+                                s.techTripList[techIndex][techTripIndex].erase(
+                                        s.techTripList[techIndex][techTripIndex].begin() + xIndex);
+                            } else {
+                                s.techTripList[techIndex][techTripIndex].erase(
+                                        s.techTripList[techIndex][techTripIndex].begin() + xIndex + dis + 1);
+                            }
+                        }
+                        double newScore = s.getScore();
+
+                        std::string val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                        std::string val2 = std::to_string(techTripList[techIndex][techTripIndex][xIndex + dis]);
+                        if (newScore < curScore) {
+                            if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                        abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                isImproved = true;
+                                bestSolution->droneTripList = s.droneTripList;
+                                bestSolution->techTripList = s.techTripList;
+                                bestSolution->ext["state"] = "";
+                                bestSolution->ext["state"] += val1;
+                                bestSolution->ext["state"] += "-";
+                                bestSolution->ext["state"] += val2;
+                                curScore = newScore;
+                            }
                         }
                     }
                 }
@@ -1642,6 +1680,8 @@ Solution *Solution::orOpt(const std::vector<std::string> &tabuList, double bestS
     }
 }
 
+
+
 Solution *Solution::twoOpt(const std::vector<std::string> &tabuList, double bestScore, RouteType type) {
     auto *bestSolution = new Solution(config, input, alpha1, alpha2);
     double curScore = std::numeric_limits<double>::max();
@@ -1655,57 +1695,59 @@ Solution *Solution::twoOpt(const std::vector<std::string> &tabuList, double best
                 for (int xIndex = -1; xIndex < (int) droneTripList[droneIndex][tripIndex].size(); xIndex++) {
                     // tech
                     for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-                        for (int yIndex = -1; yIndex < (int) techTripList[techIndex].size(); yIndex++) {
-                            std::vector<int> tmp1, tmp2;
-                            if (xIndex >= 0) {
-                                tmp1.insert(tmp1.end(),
-                                            droneTripList[droneIndex][tripIndex].begin(),
-                                            droneTripList[droneIndex][tripIndex].begin() + xIndex + 1);
-                            }
+                        for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+                            for (int yIndex = -1; yIndex < (int) techTripList[techIndex][techTripIndex].size(); yIndex++) {
+                                std::vector<int> tmp1, tmp2;
+                                if (xIndex >= 0) {
+                                    tmp1.insert(tmp1.end(),
+                                                droneTripList[droneIndex][tripIndex].begin(),
+                                                droneTripList[droneIndex][tripIndex].begin() + xIndex + 1);
+                                }
 
-                            if (yIndex >= 0) {
-                                tmp2.insert(tmp2.end(),
-                                            techTripList[techIndex].begin(),
-                                            techTripList[techIndex].begin() + yIndex + 1);
-                            }
+                                if (yIndex >= 0) {
+                                    tmp2.insert(tmp2.end(),
+                                                techTripList[techIndex][techTripIndex].begin(),
+                                                techTripList[techIndex][techTripIndex].begin() + yIndex + 1);
+                                }
 
-                            if (yIndex < (int) techTripList[techIndex].size()) {
-                                tmp1.insert(tmp1.end(),
-                                            techTripList[techIndex].begin() + yIndex + 1,
-                                            techTripList[techIndex].end());
-                            }
+                                if (yIndex < (int) techTripList[techIndex][techTripIndex].size()) {
+                                    tmp1.insert(tmp1.end(),
+                                                techTripList[techIndex][techTripIndex].begin() + yIndex + 1,
+                                                techTripList[techIndex][techTripIndex].end());
+                                }
 
-                            if (xIndex < (int) droneTripList[droneIndex][tripIndex].size()) {
-                                tmp2.insert(tmp2.end(),
-                                            droneTripList[droneIndex][tripIndex].begin() + xIndex + 1,
-                                            droneTripList[droneIndex][tripIndex].end());
-                            }
-                            Solution s = *this;
+                                if (xIndex < (int) droneTripList[droneIndex][tripIndex].size()) {
+                                    tmp2.insert(tmp2.end(),
+                                                droneTripList[droneIndex][tripIndex].begin() + xIndex + 1,
+                                                droneTripList[droneIndex][tripIndex].end());
+                                }
+                                Solution s = *this;
 
-                            s.droneTripList[droneIndex][tripIndex] = tmp1;
-                            s.techTripList[techIndex] = tmp2;
+                                s.droneTripList[droneIndex][tripIndex] = tmp1;
+                                s.techTripList[techIndex][techTripIndex] = tmp2;
 
-                            double newScore = s.getScore();
+                                double newScore = s.getScore();
 
-                            std::string val1 = "0";
-                            if (xIndex >= 0) {
-                                val1 = std::to_string(droneTripList[droneIndex][tripIndex][xIndex]);
-                            }
-                            std::string val2 = "0";
-                            if (yIndex >= 0) {
-                                val2 = std::to_string(techTripList[techIndex][yIndex]);
-                            }
-                            if (newScore < curScore) {
-                                if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                             abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                    isImproved = true;
-                                    bestSolution->droneTripList = s.droneTripList;
-                                    bestSolution->techTripList = s.techTripList;
-                                    bestSolution->ext["state"] = "";
-                                    bestSolution->ext["state"] += val1;
-                                    bestSolution->ext["state"] += "-";
-                                    bestSolution->ext["state"] += val2;
-                                    curScore = newScore;
+                                std::string val1 = "0";
+                                if (xIndex >= 0) {
+                                    val1 = std::to_string(droneTripList[droneIndex][tripIndex][xIndex]);
+                                }
+                                std::string val2 = "0";
+                                if (yIndex >= 0) {
+                                    val2 = std::to_string(techTripList[techIndex][techTripIndex][yIndex]);
+                                }
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = "";
+                                        bestSolution->ext["state"] += val1;
+                                        bestSolution->ext["state"] += "-";
+                                        bestSolution->ext["state"] += val2;
+                                        curScore = newScore;
+                                    }
                                 }
                             }
                         }
@@ -1779,133 +1821,137 @@ Solution *Solution::twoOpt(const std::vector<std::string> &tabuList, double best
 
         // tech
         for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-            for (int xIndex = -1; xIndex < (int) techTripList[techIndex].size(); xIndex++) {
-                // drone
-                for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
-                    for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
-                        for (int yIndex = -1; yIndex < (int) droneTripList[droneIndex][tripIndex].size(); yIndex++) {
+            for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+                for (int xIndex = -1; xIndex < (int) techTripList[techIndex][techTripIndex].size(); xIndex++) {
+                    // drone
+                    for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
+                        for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
+                            for (int yIndex = -1; yIndex < (int) droneTripList[droneIndex][tripIndex].size(); yIndex++) {
 
-                            bool canMoveToDroneTrip = true;
-                            for (int i = xIndex + 1; i < techTripList[techIndex].size(); i++) {
-                                if (input.cusOnlyServedByTech[techTripList[techIndex][i]]) {
-                                    canMoveToDroneTrip = false;
-                                    break;
+                                bool canMoveToDroneTrip = true;
+                                for (int i = xIndex + 1; i < techTripList[techIndex][techTripIndex].size(); i++) {
+                                    if (input.cusOnlyServedByTech[techTripList[techIndex][techTripIndex][i]]) {
+                                        canMoveToDroneTrip = false;
+                                        break;
+                                    }
+                                }
+                                if (!canMoveToDroneTrip) {
+                                    continue;
+                                }
+
+                                std::vector<int> tmp1, tmp2;
+                                if (xIndex >= 0) {
+                                    tmp1.insert(tmp1.end(),
+                                                techTripList[techIndex][techTripIndex].begin(),
+                                                techTripList[techIndex][techTripIndex].begin() + xIndex + 1);
+                                }
+
+                                if (yIndex >= 0) {
+                                    tmp2.insert(tmp2.end(),
+                                                droneTripList[droneIndex][tripIndex].begin(),
+                                                droneTripList[droneIndex][tripIndex].begin() + yIndex + 1);
+                                }
+
+                                if (yIndex < (int) droneTripList[droneIndex][tripIndex].size()) {
+                                    tmp1.insert(tmp1.end(),
+                                                droneTripList[droneIndex][tripIndex].begin() + yIndex + 1,
+                                                droneTripList[droneIndex][tripIndex].end());
+                                }
+
+                                if (xIndex < (int) techTripList[techIndex][techTripIndex].size()) {
+                                    tmp2.insert(tmp2.end(),
+                                                techTripList[techIndex][techTripIndex].begin() + xIndex + 1,
+                                                techTripList[techIndex][techTripIndex].end());
+                                }
+                                Solution s = *this;
+
+                                s.techTripList[techIndex][techTripIndex] = tmp1;
+                                s.droneTripList[droneIndex][tripIndex] = tmp2;
+
+                                double newScore = s.getScore();
+                                std::string val1 = "0";
+                                if (xIndex >= 0) {
+                                    val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                                }
+                                std::string val2 = "0";
+                                if (yIndex >= 0) {
+                                    val2 = std::to_string(droneTripList[droneIndex][tripIndex][yIndex]);
+                                }
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = "";
+                                        bestSolution->ext["state"] += val1;
+                                        bestSolution->ext["state"] += "-";
+                                        bestSolution->ext["state"] += val2;
+                                        curScore = newScore;
+                                    }
                                 }
                             }
-                            if (!canMoveToDroneTrip) {
+                        }
+                    }
+
+                    // tech
+                    for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
+                        for (int techTripIndex2 = 0; techTripIndex2 < techTripList[techIndex2].size(); techTripIndex2++){
+                            if (techIndex == techIndex2 && techTripIndex2 == techTripIndex) {
                                 continue;
                             }
-
-                            std::vector<int> tmp1, tmp2;
-                            if (xIndex >= 0) {
-                                tmp1.insert(tmp1.end(),
-                                            techTripList[techIndex].begin(),
-                                            techTripList[techIndex].begin() + xIndex + 1);
-                            }
-
-                            if (yIndex >= 0) {
-                                tmp2.insert(tmp2.end(),
-                                            droneTripList[droneIndex][tripIndex].begin(),
-                                            droneTripList[droneIndex][tripIndex].begin() + yIndex + 1);
-                            }
-
-                            if (yIndex < (int) droneTripList[droneIndex][tripIndex].size()) {
-                                tmp1.insert(tmp1.end(),
-                                            droneTripList[droneIndex][tripIndex].begin() + yIndex + 1,
-                                            droneTripList[droneIndex][tripIndex].end());
-                            }
-
-                            if (xIndex < (int) techTripList[techIndex].size()) {
-                                tmp2.insert(tmp2.end(),
-                                            techTripList[techIndex].begin() + xIndex + 1,
-                                            techTripList[techIndex].end());
-                            }
-                            Solution s = *this;
-
-                            s.techTripList[techIndex] = tmp1;
-                            s.droneTripList[droneIndex][tripIndex] = tmp2;
-
-                            double newScore = s.getScore();
-                            std::string val1 = "0";
-                            if (xIndex >= 0) {
-                                val1 = std::to_string(techTripList[techIndex][xIndex]);
-                            }
-                            std::string val2 = "0";
-                            if (yIndex >= 0) {
-                                val2 = std::to_string(droneTripList[droneIndex][tripIndex][yIndex]);
-                            }
-                            if (newScore < curScore) {
-                                if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                             abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                    isImproved = true;
-                                    bestSolution->droneTripList = s.droneTripList;
-                                    bestSolution->techTripList = s.techTripList;
-                                    bestSolution->ext["state"] = "";
-                                    bestSolution->ext["state"] += val1;
-                                    bestSolution->ext["state"] += "-";
-                                    bestSolution->ext["state"] += val2;
-                                    curScore = newScore;
+                            for (int yIndex = -1; yIndex < (int) techTripList[techIndex2][techTripIndex2].size(); yIndex++) {
+                                std::vector<int> tmp1, tmp2;
+                                if (xIndex >= 0) {
+                                    tmp1.insert(tmp1.end(),
+                                                techTripList[techIndex][techTripIndex].begin(),
+                                                techTripList[techIndex][techTripIndex].begin() + xIndex + 1);
                                 }
-                            }
-                        }
-                    }
-                }
 
-                // tech
-                for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
-                    if (techIndex == techIndex2) {
-                        continue;
-                    }
-                    for (int yIndex = -1; yIndex < (int) techTripList[techIndex2].size(); yIndex++) {
-                        std::vector<int> tmp1, tmp2;
-                        if (xIndex >= 0) {
-                            tmp1.insert(tmp1.end(),
-                                        techTripList[techIndex].begin(),
-                                        techTripList[techIndex].begin() + xIndex + 1);
-                        }
+                                if (yIndex >= 0) {
+                                    tmp2.insert(tmp2.end(),
+                                                techTripList[techIndex2][techTripIndex2].begin(),
+                                                techTripList[techIndex2][techTripIndex2].begin() + yIndex + 1);
+                                }
 
-                        if (yIndex >= 0) {
-                            tmp2.insert(tmp2.end(),
-                                        techTripList[techIndex2].begin(),
-                                        techTripList[techIndex2].begin() + yIndex + 1);
-                        }
+                                if (yIndex < (int) techTripList[techIndex2][techTripIndex2].size()) {
+                                    tmp1.insert(tmp1.end(),
+                                                techTripList[techIndex2][techTripIndex2].begin() + yIndex + 1,
+                                                techTripList[techIndex2][techTripIndex2].end());
+                                }
 
-                        if (yIndex < (int) techTripList[techIndex2].size()) {
-                            tmp1.insert(tmp1.end(),
-                                        techTripList[techIndex2].begin() + yIndex + 1,
-                                        techTripList[techIndex2].end());
-                        }
+                                if (xIndex < (int) techTripList[techIndex][techTripIndex].size()) {
+                                    tmp2.insert(tmp2.end(),
+                                                techTripList[techIndex][techTripIndex].begin() + xIndex + 1,
+                                                techTripList[techIndex][techTripIndex].end());
+                                }
+                                Solution s = *this;
 
-                        if (xIndex < (int) techTripList[techIndex].size()) {
-                            tmp2.insert(tmp2.end(),
-                                        techTripList[techIndex].begin() + xIndex + 1,
-                                        techTripList[techIndex].end());
-                        }
-                        Solution s = *this;
+                                s.techTripList[techIndex][techTripIndex] = tmp1;
+                                s.techTripList[techIndex2][techTripIndex2] = tmp2;
 
-                        s.techTripList[techIndex] = tmp1;
-                        s.techTripList[techIndex2] = tmp2;
-
-                        double newScore = s.getScore();
-                        std::string val1 = "0";
-                        if (xIndex >= 0) {
-                            val1 = std::to_string(techTripList[techIndex][xIndex]);
-                        }
-                        std::string val2 = "0";
-                        if (yIndex >= 0) {
-                            val2 = std::to_string(techTripList[techIndex2][yIndex]);
-                        }
-                        if (newScore < curScore) {
-                            if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                         abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                isImproved = true;
-                                bestSolution->droneTripList = s.droneTripList;
-                                bestSolution->techTripList = s.techTripList;
-                                bestSolution->ext["state"] = "";
-                                bestSolution->ext["state"] += val1;
-                                bestSolution->ext["state"] += "-";
-                                bestSolution->ext["state"] += val2;
-                                curScore = newScore;
+                                double newScore = s.getScore();
+                                std::string val1 = "0";
+                                if (xIndex >= 0) {
+                                    val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                                }
+                                std::string val2 = "0";
+                                if (yIndex >= 0) {
+                                    val2 = std::to_string(techTripList[techIndex2][techTripIndex2][yIndex]);
+                                }
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = "";
+                                        bestSolution->ext["state"] += val1;
+                                        bestSolution->ext["state"] += "-";
+                                        bestSolution->ext["state"] += val2;
+                                        curScore = newScore;
+                                    }
+                                }
                             }
                         }
                     }
@@ -1987,70 +2033,76 @@ Solution *Solution::twoOpt(const std::vector<std::string> &tabuList, double best
 
         // tech
         for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-            for (int xIndex = -1; xIndex < (int) techTripList[techIndex].size(); xIndex++) {
-                for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
-                    if (techIndex == techIndex2) {
-                        continue;
-                    }
-                    for (int yIndex = -1; yIndex < (int) techTripList[techIndex2].size(); yIndex++) {
-                        std::vector<int> tmp1, tmp2;
-                        if (xIndex >= 0) {
-                            tmp1.insert(tmp1.end(),
-                                        techTripList[techIndex].begin(),
-                                        techTripList[techIndex].begin() + xIndex + 1);
-                        }
+            for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+                for (int xIndex = -1; xIndex < (int) techTripList[techIndex][techTripIndex].size(); xIndex++) {
+                    
+                    for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
+                        for (int techTripIndex2 = 0; techTripIndex2 < techTripList[techIndex2].size(); techTripIndex2++){
+                            if (techIndex == techIndex2 && techTripIndex == techTripIndex2) {
+                                continue;
+                            }
 
-                        if (yIndex >= 0) {
-                            tmp2.insert(tmp2.end(),
-                                        techTripList[techIndex2].begin(),
-                                        techTripList[techIndex2].begin() + yIndex + 1);
-                        }
+                            for (int yIndex = -1; yIndex < (int) techTripList[techIndex2][techTripIndex2].size(); yIndex++) {
+                                std::vector<int> tmp1, tmp2;
+                                if (xIndex >= 0) {
+                                    tmp1.insert(tmp1.end(),
+                                                techTripList[techIndex][techTripIndex].begin(),
+                                                techTripList[techIndex][techTripIndex].begin() + xIndex + 1);
+                                }
 
-                        if (yIndex < (int) techTripList[techIndex2].size()) {
-                            tmp1.insert(tmp1.end(),
-                                        techTripList[techIndex2].begin() + yIndex + 1,
-                                        techTripList[techIndex2].end());
-                        }
+                                if (yIndex >= 0) {
+                                    tmp2.insert(tmp2.end(),
+                                                techTripList[techIndex2][techTripIndex2].begin(),
+                                                techTripList[techIndex2][techTripIndex2].begin() + yIndex + 1);
+                                }
 
-                        if (xIndex < (int) techTripList[techIndex].size()) {
-                            tmp2.insert(tmp2.end(),
-                                        techTripList[techIndex].begin() + xIndex + 1,
-                                        techTripList[techIndex].end());
-                        }
-                        Solution s = *this;
+                                if (yIndex < (int) techTripList[techIndex2][techTripIndex2].size()) {
+                                    tmp1.insert(tmp1.end(),
+                                                techTripList[techIndex2][techTripIndex2].begin() + yIndex + 1,
+                                                techTripList[techIndex2][techTripIndex2].end());
+                                }
 
-                        s.techTripList[techIndex] = tmp1;
-                        s.techTripList[techIndex2] = tmp2;
+                                if (xIndex < (int) techTripList[techIndex][techTripIndex].size()) {
+                                    tmp2.insert(tmp2.end(),
+                                                techTripList[techIndex][techTripIndex].begin() + xIndex + 1,
+                                                techTripList[techIndex][techTripIndex].end());
+                                }
 
-                        double newScore = s.getScore();
-                        std::string val1 = "0";
-                        if (xIndex >= 0) {
-                            val1 = std::to_string(techTripList[techIndex][xIndex]);
-                        }
-                        std::string val2 = "0";
-                        if (yIndex >= 0) {
-                            val2 = std::to_string(techTripList[techIndex2][yIndex]);
-                        }
-                        if (newScore < curScore) {
-                            if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                         abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                isImproved = true;
-                                bestSolution->droneTripList = s.droneTripList;
-                                bestSolution->techTripList = s.techTripList;
-                                bestSolution->ext["state"] = "";
-                                bestSolution->ext["state"] += val1;
-                                bestSolution->ext["state"] += "-";
-                                bestSolution->ext["state"] += val2;
-                                curScore = newScore;
+                                Solution s = *this;
+
+                                s.techTripList[techIndex][techTripIndex] = tmp1;
+                                s.techTripList[techIndex2][techTripIndex2] = tmp2;
+
+                                double newScore = s.getScore();
+                                std::string val1 = "0";
+                                if (xIndex >= 0) {
+                                    val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex]);
+                                }
+                                std::string val2 = "0";
+                                if (yIndex >= 0) {
+                                    val2 = std::to_string(techTripList[techIndex2][techTripIndex2][yIndex]);
+                                }
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = "";
+                                        bestSolution->ext["state"] += val1;
+                                        bestSolution->ext["state"] += "-";
+                                        bestSolution->ext["state"] += val2;
+                                        curScore = newScore;
+                                    }
+                                }
                             }
                         }
-                    }
 
+                    }
                 }
             }
         }
     }
-
     if (isImproved) {
         return bestSolution;
     } else {
@@ -2072,59 +2124,61 @@ Solution *Solution::crossExchange(const std::vector<std::string> &tabuList, doub
                 for (int xIndex = 0; xIndex < (int) droneTripList[droneIndex][tripIndex].size() - dis1; xIndex++) {
                     // tech
                     for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-                        for (int yIndex = 0; yIndex < (int) techTripList[techIndex].size() - dis2; yIndex++) {
-                            bool canMoveToDroneTrip = true;
-                            for (int i = yIndex; i <= yIndex + dis2; i++) {
-                                if (input.cusOnlyServedByTech[techTripList[techIndex][i]]) {
-                                    canMoveToDroneTrip = false;
-                                    break;
+                        for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+                            for (int yIndex = 0; yIndex < (int) techTripList[techIndex][techTripIndex].size() - dis2; yIndex++) {
+                                bool canMoveToDroneTrip = true;
+                                for (int i = yIndex; i <= yIndex + dis2; i++) {
+                                    if (input.cusOnlyServedByTech[techTripList[techIndex][techTripIndex][i]]) {
+                                        canMoveToDroneTrip = false;
+                                        break;
+                                    }
                                 }
-                            }
-                            if (!canMoveToDroneTrip) {
-                                continue;
-                            }
+                                if (!canMoveToDroneTrip) {
+                                    continue;
+                                }
 
-                            Solution s = *this;
+                                Solution s = *this;
 
-                            s.techTripList[techIndex].insert(
-                                    s.techTripList[techIndex].begin() + yIndex + dis2 + 1,
-                                    droneTripList[droneIndex][tripIndex].begin() + xIndex,
-                                    droneTripList[droneIndex][tripIndex].begin() + xIndex + dis1 + 1
-                            );
-                            s.droneTripList[droneIndex][tripIndex].insert(
-                                    s.droneTripList[droneIndex][tripIndex].begin() + xIndex + dis1 + 1,
-                                    techTripList[techIndex].begin() + yIndex,
-                                    techTripList[techIndex].begin() + yIndex + dis2 + 1
-                            );
+                                s.techTripList[techIndex][techTripIndex].insert(
+                                        s.techTripList[techIndex][techTripIndex].begin() + yIndex + dis2 + 1,
+                                        droneTripList[droneIndex][tripIndex].begin() + xIndex,
+                                        droneTripList[droneIndex][tripIndex].begin() + xIndex + dis1 + 1
+                                );
+                                s.droneTripList[droneIndex][tripIndex].insert(
+                                        s.droneTripList[droneIndex][tripIndex].begin() + xIndex + dis1 + 1,
+                                        techTripList[techIndex][techTripIndex].begin() + yIndex,
+                                        techTripList[techIndex][techTripIndex].begin() + yIndex + dis2 + 1
+                                );
 
-                            s.techTripList[techIndex].erase(
-                                    s.techTripList[techIndex].begin() + yIndex,
-                                    s.techTripList[techIndex].begin() + yIndex + dis2 + 1
-                            );
+                                s.techTripList[techIndex][techTripIndex].erase(
+                                        s.techTripList[techIndex][techTripIndex].begin() + yIndex,
+                                        s.techTripList[techIndex][techTripIndex].begin() + yIndex + dis2 + 1
+                                );
 
-                            s.droneTripList[droneIndex][tripIndex].erase(
-                                    s.droneTripList[droneIndex][tripIndex].begin() + xIndex,
-                                    s.droneTripList[droneIndex][tripIndex].begin() + xIndex + dis1 + 1
-                            );
+                                s.droneTripList[droneIndex][tripIndex].erase(
+                                        s.droneTripList[droneIndex][tripIndex].begin() + xIndex,
+                                        s.droneTripList[droneIndex][tripIndex].begin() + xIndex + dis1 + 1
+                                );
 
-                            double newScore = s.getScore();
+                                double newScore = s.getScore();
 
-                            std::string val1 = std::to_string(droneTripList[droneIndex][tripIndex][xIndex])
-                                               + "-" +
-                                               std::to_string(droneTripList[droneIndex][tripIndex][xIndex + dis1]);
-                            std::string val2 = std::to_string(techTripList[techIndex][yIndex])
-                                               + "-" + std::to_string(techTripList[techIndex][yIndex + dis2]);
-                            if (newScore < curScore) {
-                                if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                             abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                    isImproved = true;
-                                    bestSolution->droneTripList = s.droneTripList;
-                                    bestSolution->techTripList = s.techTripList;
-                                    bestSolution->ext["state"] = "";
-                                    bestSolution->ext["state"] += val1;
-                                    bestSolution->ext["state"] += "-";
-                                    bestSolution->ext["state"] += val2;
-                                    curScore = newScore;
+                                std::string val1 = std::to_string(droneTripList[droneIndex][tripIndex][xIndex])
+                                                + "-" +
+                                                std::to_string(droneTripList[droneIndex][tripIndex][xIndex + dis1]);
+                                std::string val2 = std::to_string(techTripList[techIndex][techTripIndex][yIndex])
+                                                + "-" + std::to_string(techTripList[techIndex][techTripIndex][yIndex + dis2]);
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = "";
+                                        bestSolution->ext["state"] += val1;
+                                        bestSolution->ext["state"] += "-";
+                                        bestSolution->ext["state"] += val2;
+                                        curScore = newScore;
+                                    }
                                 }
                             }
                         }
@@ -2194,117 +2248,121 @@ Solution *Solution::crossExchange(const std::vector<std::string> &tabuList, doub
 
         // tech
         for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-            for (int xIndex = 0; xIndex < (int) techTripList[techIndex].size() - dis1; xIndex++) {
+            for ( int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+                for (int xIndex = 0; xIndex < (int) techTripList[techIndex][techTripIndex].size() - dis1; xIndex++) {
 
-                // drone
-                for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
-                    for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
-                        for (int yIndex = 0;
-                             yIndex < (int) droneTripList[droneIndex][tripIndex].size() - dis2; yIndex++) {
-                            bool canMoveToDroneTrip = true;
-                            for (int i = xIndex; i <= xIndex + dis1; i++) {
-                                if (input.cusOnlyServedByTech[techTripList[techIndex][i]]) {
-                                    canMoveToDroneTrip = false;
-                                    break;
+                    // drone
+                    for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
+                        for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
+                            for (int yIndex = 0;
+                                yIndex < (int) droneTripList[droneIndex][tripIndex].size() - dis2; yIndex++) {
+                                bool canMoveToDroneTrip = true;
+                                for (int i = xIndex; i <= xIndex + dis1; i++) {
+                                    if (input.cusOnlyServedByTech[techTripList[techIndex][techTripIndex][i]]) {
+                                        canMoveToDroneTrip = false;
+                                        break;
+                                    }
                                 }
-                            }
-                            if (!canMoveToDroneTrip) {
-                                continue;
-                            }
-                            Solution s = *this;
+                                if (!canMoveToDroneTrip) {
+                                    continue;
+                                }
+                                Solution s = *this;
 
-                            s.droneTripList[droneIndex][tripIndex].insert(
-                                    s.droneTripList[droneIndex][tripIndex].begin() + yIndex + dis2 + 1,
-                                    techTripList[techIndex].begin() + xIndex,
-                                    techTripList[techIndex].begin() + xIndex + dis1 + 1
-                            );
-                            s.techTripList[techIndex].insert(
-                                    s.techTripList[techIndex].begin() + xIndex + dis1 + 1,
-                                    droneTripList[droneIndex][tripIndex].begin() + yIndex,
-                                    droneTripList[droneIndex][tripIndex].begin() + yIndex + dis2 + 1
-                            );
+                                s.droneTripList[droneIndex][tripIndex].insert(
+                                        s.droneTripList[droneIndex][tripIndex].begin() + yIndex + dis2 + 1,
+                                        techTripList[techIndex][techTripIndex].begin() + xIndex,
+                                        techTripList[techIndex][techTripIndex].begin() + xIndex + dis1 + 1
+                                );
+                                s.techTripList[techIndex][techTripIndex].insert(
+                                        s.techTripList[techIndex][techTripIndex].begin() + xIndex + dis1 + 1,
+                                        droneTripList[droneIndex][tripIndex].begin() + yIndex,
+                                        droneTripList[droneIndex][tripIndex].begin() + yIndex + dis2 + 1
+                                );
 
-                            s.droneTripList[droneIndex][tripIndex].erase(
-                                    s.droneTripList[droneIndex][tripIndex].begin() + yIndex,
-                                    s.droneTripList[droneIndex][tripIndex].begin() + yIndex + dis2 + 1
-                            );
+                                s.droneTripList[droneIndex][tripIndex].erase(
+                                        s.droneTripList[droneIndex][tripIndex].begin() + yIndex,
+                                        s.droneTripList[droneIndex][tripIndex].begin() + yIndex + dis2 + 1
+                                );
 
-                            s.techTripList[techIndex].erase(
-                                    s.techTripList[techIndex].begin() + xIndex,
-                                    s.techTripList[techIndex].begin() + xIndex + dis1 + 1
-                            );
+                                s.techTripList[techIndex][techTripIndex].erase(
+                                        s.techTripList[techIndex][techTripIndex].begin() + xIndex,
+                                        s.techTripList[techIndex][techTripIndex].begin() + xIndex + dis1 + 1
+                                );
 
-                            double newScore = s.getScore();
+                                double newScore = s.getScore();
 
-                            std::string val1 = std::to_string(techTripList[techIndex][xIndex])
-                                               + "-" + std::to_string(techTripList[techIndex][xIndex + dis1]);
-                            std::string val2 = std::to_string(droneTripList[droneIndex][tripIndex][yIndex])
-                                               + "-" +
-                                               std::to_string(droneTripList[droneIndex][tripIndex][yIndex + dis2]);
-                            if (newScore < curScore) {
-                                if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                             abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                    isImproved = true;
-                                    bestSolution->droneTripList = s.droneTripList;
-                                    bestSolution->techTripList = s.techTripList;
-                                    bestSolution->ext["state"] = "";
-                                    bestSolution->ext["state"] += val1;
-                                    bestSolution->ext["state"] += "-";
-                                    bestSolution->ext["state"] += val2;
-                                    curScore = newScore;
+                                std::string val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex])
+                                                + "-" + std::to_string(techTripList[techIndex][techTripIndex][xIndex + dis1]);
+                                std::string val2 = std::to_string(droneTripList[droneIndex][tripIndex][yIndex])
+                                                + "-" +
+                                                std::to_string(droneTripList[droneIndex][tripIndex][yIndex + dis2]);
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = "";
+                                        bestSolution->ext["state"] += val1;
+                                        bestSolution->ext["state"] += "-";
+                                        bestSolution->ext["state"] += val2;
+                                        curScore = newScore;
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                // tech
-                for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
-                    for (int yIndex = 0; yIndex < (int) techTripList[techIndex2].size() - dis2; yIndex++) {
-                        if (techIndex == techIndex2) {
-                            continue;
-                        }
-                        Solution s = *this;
+                    // tech
+                    for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
+                        for (int techTripIndex2 = 0; techTripIndex2 < techTripList[techIndex2].size(); techTripIndex2++){
+                                for (int yIndex = 0; yIndex < (int) techTripList[techIndex2][techTripIndex2].size() - dis2; yIndex++) {
+                                if (techIndex == techIndex2) {
+                                    continue;
+                                }
+                                Solution s = *this;
 
-                        s.techTripList[techIndex2].insert(
-                                s.techTripList[techIndex2].begin() + yIndex + dis2 + 1,
-                                techTripList[techIndex].begin() + xIndex,
-                                techTripList[techIndex].begin() + xIndex + dis1 + 1
-                        );
-                        s.techTripList[techIndex].insert(
-                                s.techTripList[techIndex].begin() + xIndex + dis1 + 1,
-                                techTripList[techIndex2].begin() + yIndex,
-                                techTripList[techIndex2].begin() + yIndex + dis2 + 1
-                        );
+                                s.techTripList[techIndex2][techTripIndex2].insert(
+                                        s.techTripList[techIndex2][techTripIndex2].begin() + yIndex + dis2 + 1,
+                                        techTripList[techIndex][techTripIndex].begin() + xIndex,
+                                        techTripList[techIndex][techTripIndex].begin() + xIndex + dis1 + 1
+                                );
+                                s.techTripList[techIndex][techTripIndex].insert(
+                                        s.techTripList[techIndex][techTripIndex].begin() + xIndex + dis1 + 1,
+                                        techTripList[techIndex2][techTripIndex2].begin() + yIndex,
+                                        techTripList[techIndex2][techTripIndex2].begin() + yIndex + dis2 + 1
+                                );
 
-                        s.techTripList[techIndex2].erase(
-                                s.techTripList[techIndex2].begin() + yIndex,
-                                s.techTripList[techIndex2].begin() + yIndex + dis2 + 1
-                        );
+                                s.techTripList[techIndex2][techTripIndex2].erase(
+                                        s.techTripList[techIndex2][techTripIndex2].begin() + yIndex,
+                                        s.techTripList[techIndex2][techTripIndex2].begin() + yIndex + dis2 + 1
+                                );
 
-                        s.techTripList[techIndex].erase(
-                                s.techTripList[techIndex].begin() + xIndex,
-                                s.techTripList[techIndex].begin() + xIndex + dis1 + 1
-                        );
+                                s.techTripList[techIndex][techTripIndex].erase(
+                                        s.techTripList[techIndex][techTripIndex].begin() + xIndex,
+                                        s.techTripList[techIndex][techTripIndex].begin() + xIndex + dis1 + 1
+                                );
 
-                        double newScore = s.getScore();
+                                double newScore = s.getScore();
 
-                        std::string val1 = std::to_string(techTripList[techIndex][xIndex])
-                                           + "-" + std::to_string(techTripList[techIndex][xIndex + dis1]);
-                        std::string val2 = std::to_string(techTripList[techIndex2][yIndex])
-                                           + "-" +
-                                           std::to_string(techTripList[techIndex2][yIndex + dis2]);
-                        if (newScore < curScore) {
-                            if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                         abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                isImproved = true;
-                                bestSolution->droneTripList = s.droneTripList;
-                                bestSolution->techTripList = s.techTripList;
-                                bestSolution->ext["state"] = "";
-                                bestSolution->ext["state"] += val1;
-                                bestSolution->ext["state"] += "-";
-                                bestSolution->ext["state"] += val2;
-                                curScore = newScore;
+                                std::string val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex])
+                                                + "-" + std::to_string(techTripList[techIndex][techTripIndex][xIndex + dis1]);
+                                std::string val2 = std::to_string(techTripList[techIndex2][techTripIndex2][yIndex])
+                                                + "-" +
+                                                std::to_string(techTripList[techIndex2][techTripIndex2][yIndex + dis2]);
+                                if (newScore < curScore) {
+                                    if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                                abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                        isImproved = true;
+                                        bestSolution->droneTripList = s.droneTripList;
+                                        bestSolution->techTripList = s.techTripList;
+                                        bestSolution->ext["state"] = "";
+                                        bestSolution->ext["state"] += val1;
+                                        bestSolution->ext["state"] += "-";
+                                        bestSolution->ext["state"] += val2;
+                                        curScore = newScore;
+                                    }
+                                }
                             }
                         }
                     }
@@ -2393,69 +2451,71 @@ Solution *Solution::crossExchange(const std::vector<std::string> &tabuList, doub
         // tech
 
         for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-            for (int xIndex = 0; xIndex < (int) techTripList[techIndex].size() - dis1; xIndex++) {
-                for (int yIndex = 0; yIndex < (int) techTripList[techIndex].size() - dis2; yIndex++) {
-                    if (xIndex == yIndex) {
-                        continue;
-                    }
-                    if (xIndex + dis1 < yIndex || xIndex > yIndex + dis2) {
-                        Solution s = *this;
-
-                        std::vector<int> tmp;
-
-                        int beg1, end1, beg2, end2;
-                        if (xIndex < yIndex) {
-                            beg1 = xIndex;
-                            end1 = xIndex + dis1 + 1;
-                            beg2 = yIndex;
-                            end2 = yIndex + dis2 + 1;
-                        } else {
-                            beg2 = xIndex;
-                            end2 = xIndex + dis1 + 1;
-                            beg1 = yIndex;
-                            end1 = yIndex + dis2 + 1;
+            for ( int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+                for (int xIndex = 0; xIndex < (int) techTripList[techIndex][techTripIndex].size() - dis1; xIndex++) {
+                    for (int yIndex = 0; yIndex < (int) techTripList[techIndex][techTripIndex].size() - dis2; yIndex++) {
+                        if (xIndex == yIndex) {
+                            continue;
                         }
+                        if (xIndex + dis1 < yIndex || xIndex > yIndex + dis2) {
+                            Solution s = *this;
 
-                        tmp.insert(tmp.end(),
-                                   techTripList[techIndex].begin(),
-                                   techTripList[techIndex].begin() + beg1);
-                        tmp.insert(tmp.end(),
-                                   techTripList[techIndex].begin() + beg2,
-                                   techTripList[techIndex].begin() + end2);
-                        tmp.insert(tmp.end(),
-                                   techTripList[techIndex].begin() + end1,
-                                   techTripList[techIndex].begin() + beg2);
-                        tmp.insert(tmp.end(),
-                                   techTripList[techIndex].begin() + beg1,
-                                   techTripList[techIndex].begin() + end1);
+                            std::vector<int> tmp;
 
-                        tmp.insert(tmp.end(),
-                                   techTripList[techIndex].begin() + end2,
-                                   techTripList[techIndex].end());
+                            int beg1, end1, beg2, end2;
+                            if (xIndex < yIndex) {
+                                beg1 = xIndex;
+                                end1 = xIndex + dis1 + 1;
+                                beg2 = yIndex;
+                                end2 = yIndex + dis2 + 1;
+                            } else {
+                                beg2 = xIndex;
+                                end2 = xIndex + dis1 + 1;
+                                beg1 = yIndex;
+                                end1 = yIndex + dis2 + 1;
+                            }
 
-                        s.techTripList[techIndex].erase(s.techTripList[techIndex].begin(),
-                                                        s.techTripList[techIndex].end());
-                        s.techTripList[techIndex].insert(s.techTripList[techIndex].begin(),
-                                                         tmp.begin(), tmp.end());
+                            tmp.insert(tmp.end(),
+                                    techTripList[techIndex][techTripIndex].begin(),
+                                    techTripList[techIndex][techTripIndex].begin() + beg1);
+                            tmp.insert(tmp.end(),
+                                    techTripList[techIndex][techTripIndex].begin() + beg2,
+                                    techTripList[techIndex][techTripIndex].begin() + end2);
+                            tmp.insert(tmp.end(),
+                                    techTripList[techIndex][techTripIndex].begin() + end1,
+                                    techTripList[techIndex][techTripIndex].begin() + beg2);
+                            tmp.insert(tmp.end(),
+                                    techTripList[techIndex][techTripIndex].begin() + beg1,
+                                    techTripList[techIndex][techTripIndex].begin() + end1);
 
-                        double newScore = s.getScore();
+                            tmp.insert(tmp.end(),
+                                    techTripList[techIndex][techTripIndex].begin() + end2,
+                                    techTripList[techIndex][techTripIndex].end());
 
-                        std::string val1 = std::to_string(techTripList[techIndex][xIndex])
-                                           + "-" + std::to_string(techTripList[techIndex][xIndex + dis1]);
-                        std::string val2 = std::to_string(techTripList[techIndex][yIndex])
-                                           + "-" +
-                                           std::to_string(techTripList[techIndex][yIndex + dis2]);
-                        if (newScore < curScore) {
-                            if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
-                                                         abs(newScore - baseScore) > config.tabuEpsilon)) {
-                                isImproved = true;
-                                bestSolution->droneTripList = s.droneTripList;
-                                bestSolution->techTripList = s.techTripList;
-                                bestSolution->ext["state"] = "";
-                                bestSolution->ext["state"] += val1;
-                                bestSolution->ext["state"] += "-";
-                                bestSolution->ext["state"] += val2;
-                                curScore = newScore;
+                            s.techTripList[techIndex][techTripIndex].erase(s.techTripList[techIndex][techTripIndex].begin(),
+                                                            s.techTripList[techIndex][techTripIndex].end());
+                            s.techTripList[techIndex][techTripIndex].insert(s.techTripList[techIndex][techTripIndex].begin(),
+                                                            tmp.begin(), tmp.end());
+
+                            double newScore = s.getScore();
+
+                            std::string val1 = std::to_string(techTripList[techIndex][techTripIndex][xIndex])
+                                            + "-" + std::to_string(techTripList[techIndex][techTripIndex][xIndex + dis1]);
+                            std::string val2 = std::to_string(techTripList[techIndex][techTripIndex][yIndex])
+                                            + "-" +
+                                            std::to_string(techTripList[techIndex][techTripIndex][yIndex + dis2]);
+                            if (newScore < curScore) {
+                                if (newScore < bestScore || (checkTabuCondition(tabuList, val1, val2) &&
+                                                            abs(newScore - baseScore) > config.tabuEpsilon)) {
+                                    isImproved = true;
+                                    bestSolution->droneTripList = s.droneTripList;
+                                    bestSolution->techTripList = s.techTripList;
+                                    bestSolution->ext["state"] = "";
+                                    bestSolution->ext["state"] += val1;
+                                    bestSolution->ext["state"] += "-";
+                                    bestSolution->ext["state"] += val2;
+                                    curScore = newScore;
+                                }
                             }
                         }
                     }
@@ -2502,23 +2562,26 @@ Solution Solution::ejection() {
     }
 
     for (int techIndex = 0; techIndex < s.techTripList.size(); techIndex++) {
-        for (int xIndex = 0; xIndex < s.techTripList[techIndex].size(); xIndex++) {
-            ejection(s,
-                     {techIndex, xIndex},
-                     TECHNICIAN,
-                     currentGain,
-                     bestGain,
-                     currentLevel,
-                     shiftSequence,
-                     bestShiftSequence);
+        for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+            for (int xIndex = 0; xIndex < s.techTripList[techIndex][techTripIndex].size(); xIndex++) {
+                ejection(s,
+                        {techIndex, techTripIndex, xIndex},
+                        TECHNICIAN,
+                        currentGain,
+                        bestGain,
+                        currentLevel,
+                        shiftSequence,
+                        bestShiftSequence);
+            }
         }
     }
 
     for (std::pair<std::vector<int>, std::vector<int>> move: bestShiftSequence) {
         int x;
         if (move.first.size() == 2) {
-            x = s.techTripList[move.first[0]][move.first[1]];
-            s.techTripList[move.first[0]].erase(s.techTripList[move.first[0]].begin() + move.first[1]);
+            x = s.techTripList[move.first[0]][move.first[1]][move.first[2]];
+            s.techTripList[move.first[0]][move.first[1]].erase(
+                    s.techTripList[move.first[0]][move.first[1]].begin() + move.first[2]);
         } else {
             x = s.droneTripList[move.first[0]][move.first[1]][move.first[2]];
             s.droneTripList[move.first[0]][move.first[1]].erase(
@@ -2526,7 +2589,8 @@ Solution Solution::ejection() {
         }
 
         if (move.second.size() == 2) {
-            s.techTripList[move.second[0]].insert(s.techTripList[move.second[0]].begin() + move.second[1], x);
+            s.techTripList[move.second[0]][move.second[1]].insert(
+                    s.techTripList[move.second[0]][move.second[1]].begin() + move.second[2], x);
         } else {
             s.droneTripList[move.second[0]][move.second[1]].insert(
                     s.droneTripList[move.second[0]][move.second[1]].begin() + move.second[2], x);
@@ -2583,27 +2647,44 @@ std::vector<double> Solution::getScoreATrip(int tripIndex, TripType type) {
             dzt += std::max(0., droneTripCompleteTime[j] - config.droneLimitationFightTime);
         }
     } else {
-        std::vector<double> techCompleteTime(config.numTech, 0);
-        if (!techTripList[tripIndex].empty()) {
-            tmp = input.techTimes[0][techTripList[tripIndex][0]];
-
-            cusCompleteTime[techTripList[tripIndex][0]] = tmp;
-
-            for (int j = 0; j < (int) techTripList[tripIndex].size() - 1; j++) {
-                tmp += input.techTimes[techTripList[tripIndex][j]][techTripList[tripIndex][j + 1]];
-                cusCompleteTime[techTripList[tripIndex][j + 1]] = tmp;
+        double techCompleteTime = 0;
+        int maxTechTrip = 0;
+        for (auto &i : techTripList){
+            if ( maxTechTrip < i.size()){
+                maxTechTrip = (int) i.size();
             }
-
-            techCompleteTime[tripIndex] = tmp + input.techTimes[techTripList[tripIndex].back()][0];
-            if (techCompleteTime[tripIndex] > allTechTime) {
-                allTechTime = techCompleteTime[tripIndex];
+        }
+        std::vector<double> techTripCompleteTime(config.numTech, 0);
+        tmp = 0;
+        for ( int j = 0; j < techTripList[tripIndex].size(); j ++){
+            if (techTripList[tripIndex][j].empty()) {
+                continue;
             }
+            tmp1 = countTimeTruck(0, input.distances[0][techTripList[tripIndex][j][0]], input) 
+                + input.serviceTimeByTruck[techTripList[tripIndex][j][0]]; 
+            cusCompleteTime[techTripList[tripIndex][j][0]] = tmp1;
 
-            for (int j: techTripList[tripIndex]) {
-                cz += std::max(0.,
-                               techCompleteTime[tripIndex] - cusCompleteTime[j] - config.sampleLimitationWaitingTime);
+            for (int k = 0; k < (int) techTripList[tripIndex][j].size() - 1; k++) {
+                tmp1 += countTimeTruck(tmp1, input.distances[techTripList[tripIndex][j][k]][techTripList[tripIndex][j][k+1]], input)
+                    + input.serviceTimeByTruck[techTripList[tripIndex][j][k+1]]; 
+                cusCompleteTime[techTripList[tripIndex][j][k + 1]] = tmp1;
             }
-
+            techTripCompleteTime[j] = tmp1 + countTimeTruck(tmp1, input.distances[techTripList[tripIndex][j].back()][0], input); 
+            tmp += techTripCompleteTime[j];
+        }
+        techCompleteTime = tmp;
+        if (tmp > allTechTime) {
+            allTechTime = tmp;
+        }
+        for (int j = 0; j < techTripList[tripIndex].size(); j++) {
+            if (techTripList[tripIndex][j].empty()) {
+                continue;
+            }
+            for (int k: techTripList[tripIndex][j]) {
+                czt += std::max(0.,
+                                techTripCompleteTime[j] - cusCompleteTime[k] - config.sampleLimitationWaitingTime);
+            }
+            dzt += std::max(0., techTripCompleteTime[j] - config.droneLimitationFightTime);
         }
     }
     ct = std::max(allDroneTime, allTechTime);
@@ -2615,12 +2696,14 @@ Solution::ejection(Solution &solution, std::vector<int> xIndex, TripType type, d
                    int &level,
                    std::vector<std::pair<std::vector<int>, std::vector<int>>> &shiftSequence,
                    std::vector<std::pair<std::vector<int>, std::vector<int>>> &bestShiftSequence) {
+                
     std::vector<double> droneScores;
     double maxDroneScore = 0;
     droneScores.reserve(solution.droneTripList.size());
     int maxDroneIndex;
     for (int droneIndex = 0; droneIndex < solution.droneTripList.size(); droneIndex++) {
         double sc = solution.getScoreATrip(droneIndex, DRONE)[0];
+
         droneScores.push_back(sc);
         if (sc > maxDroneScore) {
             maxDroneScore = sc;
@@ -2726,6 +2809,7 @@ Solution::ejection(Solution &solution, std::vector<int> xIndex, TripType type, d
                         level--;
                     }
 
+
                     if (cusIndex == solution.droneTripList[droneIndex][tripIndex].size() - 1) {
                         delta = input.droneTimes[cus][x]
                                 + input.droneTimes[x][input.numCus + 1] - input.droneTimes[cus][input.numCus + 1];
@@ -2769,67 +2853,26 @@ Solution::ejection(Solution &solution, std::vector<int> xIndex, TripType type, d
                             level--;
                         }
                     }
+
                 }
             }
         }
 
         for (int techIndex = 0; techIndex < solution.techTripList.size(); techIndex++) {
-            for (int cusIndex = 0; cusIndex < solution.techTripList[techIndex].size(); cusIndex++) {
-                int cus = solution.techTripList[techIndex][cusIndex];
-                int cusPredecessor = (cusIndex == 0) ? 0 : solution.techTripList[techIndex][cusIndex - 1];
-                double delta = input.techTimes[cusPredecessor][x]
-                               + input.techTimes[x][cus] - input.techTimes[cusPredecessor][cus];
-                double d = std::max(cScore, techScores[techIndex] + delta) - cScore;
-
-                if (gain - d > bestGain) {
-                    solution.techTripList[techIndex].insert(
-                            solution.techTripList[techIndex].begin() + cusIndex, x);
-                    gain -= d;
-
-                    shiftSequence.push_back({xIndex, {techIndex, cusIndex}});
-                    level++;
-                    std::vector<double> tmp = solution.getScoreATrip(techIndex, TECHNICIAN);
-                    if (tmp[1] == 0 && tmp[2] == 0) {
-                        bestShiftSequence = shiftSequence;
-                        bestGain = gain;
-                    } else if (level + 1 <= config.maxEjectionLevel) {
-                        for (int yIndex = 0;
-                             yIndex < solution.techTripList[techIndex].size(); yIndex++) {
-                            Solution s = solution;
-
-                            s.techTripList[techIndex].erase(
-                                    s.techTripList[techIndex].begin() + yIndex);
-                            tmp = s.getScoreATrip(techIndex, TECHNICIAN);
-                            if (tmp[1] == 0 && tmp[2] == 0) {
-                                ejection(solution, {techIndex, yIndex},
-                                         TECHNICIAN,
-                                         gain,
-                                         bestGain,
-                                         level,
-                                         shiftSequence,
-                                         bestShiftSequence);
-                            }
-                        }
-                    }
-
-                    solution.techTripList[techIndex].erase(
-                            solution.techTripList[techIndex].begin() + cusIndex);
-                    gain += d;
-                    shiftSequence.pop_back();
-                    level--;
-                }
-
-                if (cusIndex == solution.techTripList[techIndex].size() - 1) {
-                    delta = input.techTimes[cus][x]
-                            + input.techTimes[x][input.numCus + 1] - input.techTimes[cus][input.numCus + 1];
-                    d = std::max(cScore, techScores[techIndex] + delta) - cScore;
+            for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+                for (int cusIndex = 0; cusIndex < solution.techTripList[techIndex][techTripIndex].size(); cusIndex++) {
+                    int cus = solution.techTripList[techIndex][techTripIndex][cusIndex];
+                    int cusPredecessor = (cusIndex == 0) ? 0 : solution.techTripList[techIndex][techTripIndex][cusIndex - 1];
+                    double delta = input.techTimes[cusPredecessor][x]
+                                + input.techTimes[x][cus] - input.techTimes[cusPredecessor][cus];
+                    double d = std::max(cScore, techScores[techIndex] + delta) - cScore;
 
                     if (gain - d > bestGain) {
-                        solution.techTripList[techIndex].insert(
-                                solution.techTripList[techIndex].begin() + cusIndex + 1, x);
+                        solution.techTripList[techIndex][techTripIndex].insert(
+                                solution.techTripList[techIndex][techTripIndex].begin() + cusIndex, x);
                         gain -= d;
 
-                        shiftSequence.push_back({xIndex, {techIndex, cusIndex + 1}});
+                        shiftSequence.push_back({xIndex, {techIndex, techTripIndex, cusIndex}});
                         level++;
                         std::vector<double> tmp = solution.getScoreATrip(techIndex, TECHNICIAN);
                         if (tmp[1] == 0 && tmp[2] == 0) {
@@ -2837,29 +2880,73 @@ Solution::ejection(Solution &solution, std::vector<int> xIndex, TripType type, d
                             bestGain = gain;
                         } else if (level + 1 <= config.maxEjectionLevel) {
                             for (int yIndex = 0;
-                                 yIndex < solution.techTripList[techIndex].size(); yIndex++) {
+                                yIndex < solution.techTripList[techIndex][techTripIndex].size(); yIndex++) {
                                 Solution s = solution;
 
-                                s.techTripList[techIndex].erase(
-                                        s.techTripList[techIndex].begin() + yIndex);
+                                s.techTripList[techIndex][techTripIndex].erase(
+                                        s.techTripList[techIndex][techTripIndex].begin() + yIndex);
                                 tmp = s.getScoreATrip(techIndex, TECHNICIAN);
                                 if (tmp[1] == 0 && tmp[2] == 0) {
                                     ejection(solution, {techIndex, yIndex},
-                                             TECHNICIAN,
-                                             gain,
-                                             bestGain,
-                                             level,
-                                             shiftSequence,
-                                             bestShiftSequence);
+                                            TECHNICIAN,
+                                            gain,
+                                            bestGain,
+                                            level,
+                                            shiftSequence,
+                                            bestShiftSequence);
                                 }
                             }
                         }
 
-                        solution.techTripList[techIndex].erase(
-                                solution.techTripList[techIndex].begin() + cusIndex);
+                        solution.techTripList[techIndex][techTripIndex].erase(
+                                solution.techTripList[techIndex][techTripIndex].begin() + cusIndex);
                         gain += d;
                         shiftSequence.pop_back();
                         level--;
+                    }
+
+                    if (cusIndex == solution.techTripList[techIndex][techTripIndex].size() - 1) {
+                        delta = input.techTimes[cus][x]
+                                + input.techTimes[x][input.numCus + 1] - input.techTimes[cus][input.numCus + 1];
+                        d = std::max(cScore, techScores[techIndex] + delta) - cScore;
+
+                        if (gain - d > bestGain) {
+                            solution.techTripList[techIndex][techTripIndex].insert(
+                                    solution.techTripList[techIndex][techTripIndex].begin() + cusIndex + 1, x);
+                            gain -= d;
+
+                            shiftSequence.push_back({xIndex, {techIndex, cusIndex + 1}});
+                            level++;
+                            std::vector<double> tmp = solution.getScoreATrip(techIndex, TECHNICIAN);
+                            if (tmp[1] == 0 && tmp[2] == 0) {
+                                bestShiftSequence = shiftSequence;
+                                bestGain = gain;
+                            } else if (level + 1 <= config.maxEjectionLevel) {
+                                for (int yIndex = 0;
+                                    yIndex < solution.techTripList[techIndex][techTripIndex].size(); yIndex++) {
+                                    Solution s = solution;
+
+                                    s.techTripList[techIndex][techTripIndex].erase(
+                                            s.techTripList[techIndex][techTripIndex].begin() + yIndex);
+                                    tmp = s.getScoreATrip(techIndex, TECHNICIAN);
+                                    if (tmp[1] == 0 && tmp[2] == 0) {
+                                        ejection(solution, {techIndex, yIndex},
+                                                TECHNICIAN,
+                                                gain,
+                                                bestGain,
+                                                level,
+                                                shiftSequence,
+                                                bestShiftSequence);
+                                    }
+                                }
+                            }
+
+                            solution.techTripList[techIndex][techTripIndex].erase(
+                                    solution.techTripList[techIndex][techTripIndex].begin() + cusIndex);
+                            gain += d;
+                            shiftSequence.pop_back();
+                            level--;
+                        }
                     }
                 }
             }
@@ -2869,19 +2956,19 @@ Solution::ejection(Solution &solution, std::vector<int> xIndex, TripType type, d
                 solution.droneTripList[xIndex[0]][xIndex[1]].begin() + xIndex[2], x);
     } else {
         times = input.techTimes;
-        x = solution.techTripList[xIndex[0]][xIndex[1]];
-        predecessor = (xIndex[1] == 0) ? 0 : solution.techTripList[xIndex[0]][xIndex[1] - 1];
-        successor = (xIndex[1] == solution.techTripList[xIndex[0]].size() - 1)
+        x = solution.techTripList[xIndex[0]][xIndex[1]][xIndex[2]];
+        predecessor = (xIndex[2] == 0) ? 0 : solution.techTripList[xIndex[0]][xIndex[1]][xIndex[2] - 1];
+        
+        successor = (xIndex[2] == solution.techTripList[xIndex[0]][xIndex[1]].size() - 1)
                     ? input.numCus + 1
-                    : solution.techTripList[xIndex[0]][xIndex[1] + 1];
+                    : solution.techTripList[xIndex[0]][xIndex[1]][xIndex[2] + 1];
         techScores[xIndex[0]] -= times[predecessor][x] + times[x][successor] - times[predecessor][successor];
 
         double cScore = std::max(maxDroneScore, *std::max_element(techScores.begin(), techScores.end()));
         double g = fScore - cScore;
-        solution.techTripList[xIndex[0]].erase(
-                solution.techTripList[xIndex[0]].begin() + xIndex[1]);
+        solution.techTripList[xIndex[0]][xIndex[1]].erase(
+                solution.techTripList[xIndex[0]][xIndex[1]].begin() + xIndex[2]);
         gain += g;
-
         for (int droneIndex = 0; droneIndex < solution.droneTripList.size(); droneIndex++) {
             for (int tripIndex = 0; tripIndex < solution.droneTripList[droneIndex].size(); tripIndex++) {
                 for (int cusIndex = 0; cusIndex < solution.droneTripList[droneIndex][tripIndex].size(); cusIndex++) {
@@ -2976,67 +3063,24 @@ Solution::ejection(Solution &solution, std::vector<int> xIndex, TripType type, d
                 }
             }
         }
-
         for (int techIndex = 0; techIndex < solution.techTripList.size(); techIndex++) {
-            if (techIndex == xIndex[0]) {
-                continue;
-            }
-            for (int cusIndex = 0; cusIndex < solution.techTripList[techIndex].size(); cusIndex++) {
-                int cus = solution.techTripList[techIndex][cusIndex];
-                int cusPredecessor = (cusIndex == 0) ? 0 : solution.techTripList[techIndex][cusIndex - 1];
-                double delta = input.techTimes[cusPredecessor][x]
-                               + input.techTimes[x][cus] - input.techTimes[cusPredecessor][cus];
-                double d = std::max(cScore, techScores[techIndex] + delta) - cScore;
-
-                if (gain - d > bestGain) {
-                    solution.techTripList[techIndex].insert(
-                            solution.techTripList[techIndex].begin() + cusIndex, x);
-                    gain -= d;
-
-                    shiftSequence.push_back({xIndex, {techIndex, cusIndex}});
-                    level++;
-                    std::vector<double> tmp = solution.getScoreATrip(techIndex, TECHNICIAN);
-                    if (tmp[1] == 0 && tmp[2] == 0) {
-                        bestShiftSequence = shiftSequence;
-                        bestGain = gain;
-                    } else if (level + 1 <= config.maxEjectionLevel) {
-                        for (int yIndex = 0;
-                             yIndex < solution.techTripList[techIndex].size(); yIndex++) {
-                            Solution s = solution;
-
-                            s.techTripList[techIndex].erase(
-                                    s.techTripList[techIndex].begin() + yIndex);
-                            tmp = s.getScoreATrip(techIndex, TECHNICIAN);
-                            if (tmp[1] == 0 && tmp[2] == 0) {
-                                ejection(solution, {techIndex, yIndex},
-                                         TECHNICIAN,
-                                         gain,
-                                         bestGain,
-                                         level,
-                                         shiftSequence,
-                                         bestShiftSequence);
-                            }
-                        }
-                    }
-
-                    solution.techTripList[techIndex].erase(
-                            solution.techTripList[techIndex].begin() + cusIndex);
-                    gain += d;
-                    shiftSequence.pop_back();
-                    level--;
+            for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+                if (techIndex == xIndex[0]) {
+                    continue;
                 }
-
-                if (cusIndex == solution.techTripList[techIndex].size() - 1) {
-                    delta = input.techTimes[cus][x]
-                            + input.techTimes[x][input.numCus + 1] - input.techTimes[cus][input.numCus + 1];
-                    d = std::max(cScore, techScores[techIndex] + delta) - cScore;
+                for (int cusIndex = 0; cusIndex < solution.techTripList[techIndex][techTripIndex].size(); cusIndex++) {
+                    int cus = solution.techTripList[techIndex][techTripIndex][cusIndex];
+                    int cusPredecessor = (cusIndex == 0) ? 0 : solution.techTripList[techIndex][techTripIndex][cusIndex - 1];
+                    double delta = input.techTimes[cusPredecessor][x]
+                                + input.techTimes[x][cus] - input.techTimes[cusPredecessor][cus];
+                    double d = std::max(cScore, techScores[techIndex] + delta) - cScore;
 
                     if (gain - d > bestGain) {
-                        solution.techTripList[techIndex].insert(
-                                solution.techTripList[techIndex].begin() + cusIndex + 1, x);
+                        solution.techTripList[techIndex][techTripIndex].insert(
+                                solution.techTripList[techIndex][techTripIndex].begin() + cusIndex, x);
                         gain -= d;
 
-                        shiftSequence.push_back({xIndex, {techIndex, cusIndex + 1}});
+                        shiftSequence.push_back({xIndex, {techIndex, techTripIndex, cusIndex}});
                         level++;
                         std::vector<double> tmp = solution.getScoreATrip(techIndex, TECHNICIAN);
                         if (tmp[1] == 0 && tmp[2] == 0) {
@@ -3044,36 +3088,80 @@ Solution::ejection(Solution &solution, std::vector<int> xIndex, TripType type, d
                             bestGain = gain;
                         } else if (level + 1 <= config.maxEjectionLevel) {
                             for (int yIndex = 0;
-                                 yIndex < solution.techTripList[techIndex].size(); yIndex++) {
+                                yIndex < solution.techTripList[techIndex][techTripIndex].size(); yIndex++) {
                                 Solution s = solution;
 
-                                s.techTripList[techIndex].erase(
-                                        s.techTripList[techIndex].begin() + yIndex);
+                                s.techTripList[techIndex][techTripIndex].erase(
+                                        s.techTripList[techIndex][techTripIndex].begin() + yIndex);
                                 tmp = s.getScoreATrip(techIndex, TECHNICIAN);
                                 if (tmp[1] == 0 && tmp[2] == 0) {
                                     ejection(solution, {techIndex, yIndex},
-                                             TECHNICIAN,
-                                             gain,
-                                             bestGain,
-                                             level,
-                                             shiftSequence,
-                                             bestShiftSequence);
+                                            TECHNICIAN,
+                                            gain,
+                                            bestGain,
+                                            level,
+                                            shiftSequence,
+                                            bestShiftSequence);
                                 }
                             }
                         }
 
-                        solution.techTripList[techIndex].erase(
-                                solution.techTripList[techIndex].begin() + cusIndex);
+                        solution.techTripList[techIndex][techTripIndex].erase(
+                                solution.techTripList[techIndex][techTripIndex].begin() + cusIndex);
                         gain += d;
                         shiftSequence.pop_back();
                         level--;
+                    }
+
+                    if (cusIndex == solution.techTripList[techIndex][techTripIndex].size() - 1) {
+                        delta = input.techTimes[cus][x]
+                                + input.techTimes[x][input.numCus + 1] - input.techTimes[cus][input.numCus + 1];
+                        d = std::max(cScore, techScores[techIndex] + delta) - cScore;
+
+                        if (gain - d > bestGain) {
+                            solution.techTripList[techIndex][techTripIndex].insert(
+                                    solution.techTripList[techIndex][techTripIndex].begin() + cusIndex + 1, x);
+                            gain -= d;
+
+                            shiftSequence.push_back({xIndex, {techIndex, techTripIndex, cusIndex + 1}});
+                            level++;
+                            std::vector<double> tmp = solution.getScoreATrip(techIndex, TECHNICIAN);
+                            if (tmp[1] == 0 && tmp[2] == 0) {
+                                bestShiftSequence = shiftSequence;
+                                bestGain = gain;
+                            } else if (level + 1 <= config.maxEjectionLevel) {
+                                for (int yIndex = 0;
+                                    yIndex < solution.techTripList[techIndex][techTripIndex].size(); yIndex++) {
+                                    Solution s = solution;
+
+                                    s.techTripList[techIndex][techTripIndex].erase(
+                                            s.techTripList[techIndex][techTripIndex].begin() + yIndex);
+                                    tmp = s.getScoreATrip(techIndex, TECHNICIAN);
+                                    if (tmp[1] == 0 && tmp[2] == 0) {
+                                        ejection(solution, {techIndex, yIndex},
+                                                TECHNICIAN,
+                                                gain,
+                                                bestGain,
+                                                level,
+                                                shiftSequence,
+                                                bestShiftSequence);
+                                    }
+                                }
+                            }
+
+                            solution.techTripList[techIndex][techTripIndex].erase(
+                                    solution.techTripList[techIndex][techTripIndex].begin() + cusIndex);
+                            gain += d;
+                            shiftSequence.pop_back();
+                            level--;
+                        }
                     }
                 }
             }
         }
 
-        solution.techTripList[xIndex[0]].insert(
-                solution.techTripList[xIndex[0]].begin() + xIndex[1], x);
+        solution.techTripList[xIndex[0]][xIndex[1]].insert(
+                solution.techTripList[xIndex[0]][xIndex[1]].begin() + xIndex[2], x);
     }
 }
 
@@ -3104,13 +3192,15 @@ void Solution::perturbation() {
 
                 //tech
                 for (auto &techIndex: techTripList) {
-                    for (int &yIndex: techIndex) {
-                        if (Random::get(0.0, 1.0) > swapRate) {
-                            continue;
+                    for ( auto &techTripIndex : techIndex){
+                        for (int &yIndex: techTripIndex) {
+                            if (Random::get(0.0, 1.0) > swapRate) {
+                                continue;
+                            }
+                            std::swap(droneTripList[droneIndex][tripIndex][xIndex],
+                                    yIndex);
+                            num++;
                         }
-                        std::swap(droneTripList[droneIndex][tripIndex][xIndex],
-                                  yIndex);
-                        num++;
                     }
                 }
             }
@@ -3118,38 +3208,42 @@ void Solution::perturbation() {
     }
 
     for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
-        for (int xIndex = 0; xIndex < techTripList[techIndex].size(); xIndex++) {
+        for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
+            for (int xIndex = 0; xIndex < techTripList[techIndex].size(); xIndex++) {
 
-            // tech
-            for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
-                if (techIndex == techIndex2) {
-                    continue;
-                }
-                for (int yIndex = 0; yIndex < techTripList[techIndex2].size(); yIndex++) {
-                    if (Random::get(0.0, 1.0) > swapRate) {
-                        continue;
-                    }
-
-                    std::swap(techTripList[techIndex][xIndex], techTripList[techIndex2][yIndex]);
-                    num++;
-                }
-            }
-
-            // drone
-            if (input.cusOnlyServedByTech[techTripList[techIndex][xIndex]]) {
-                continue;
-            }
-
-            for (auto &droneIndex: droneTripList) {
-                for (auto &tripIndex: droneIndex) {
-                    for (int &yIndex: tripIndex) {
-                        if (Random::get(0.0, 1.0) > swapRate) {
+                // tech
+                for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
+                    for (int techTripIndex2 = 0; techTripIndex2 < techTripList[techIndex2].size(); techTripIndex2++){
+                        if (techIndex == techIndex2 || techTripIndex2 == techTripIndex) {
                             continue;
                         }
+                        for (int yIndex = 0; yIndex < techTripList[techIndex2][techTripIndex2].size(); yIndex++) {
+                            if (Random::get(0.0, 1.0) > swapRate) {
+                                continue;
+                            }
 
-                        std::swap(techTripList[techIndex][xIndex],
-                                  yIndex);
-                        num++;
+                            std::swap(techTripList[techIndex][techTripIndex][xIndex], techTripList[techIndex2][techTripIndex2][yIndex]);
+                            num++;
+                        }
+                    }
+                }
+
+                // drone
+                if (input.cusOnlyServedByTech[techTripList[techIndex][techTripIndex][xIndex]]) {
+                    continue;
+                }
+
+                for (auto &droneIndex: droneTripList) {
+                    for (auto &tripIndex: droneIndex) {
+                        for (int &yIndex: tripIndex) {
+                            if (Random::get(0.0, 1.0) > swapRate) {
+                                continue;
+                            }
+
+                            std::swap(techTripList[techIndex][techTripIndex][xIndex],
+                                    yIndex);
+                            num++;
+                        }
                     }
                 }
             }
@@ -3209,11 +3303,18 @@ void Solution::logConsole(){
         }
         i++;
     }
-    std::cout << " \nTech Trip Init : " << techTripList.size() << std::endl;
+    i = 1;
+    std::cout << " \nTruck Trip Init : " << techTripList.size() << std::endl;
     for(auto techTrips : techTripList){
-        std::cout << "\n";
+        std::cout << "Truck " << i << "\n";
+        j = 1;
         for(auto techTrip : techTrips){
-            std:: cout << " | " << techTrip;
+            std::cout << "Trip " << j << ":";
+            for(auto trip : techTrip){
+                std:: cout << " | " << trip;
+            }
+            j++;
+            std::cout <<"\n";
         }
     }
     std::cout << " \n "  << std::endl;

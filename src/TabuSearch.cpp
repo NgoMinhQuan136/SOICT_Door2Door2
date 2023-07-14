@@ -43,32 +43,37 @@ void TabuSearch::run(json &log) {
 //        actOrd = 4;
         json itLog;
         itLog["act"] = actOrd;
-//        std::cout << "act: " << actOrd << std::endl;
+//       std::cout << "act: " << actOrd << std::endl;
 //        auto start = high_resolution_clock::now();
         switch (actOrd) {
             case MOVE_10: {
                 neighborhoodType = MOVE_10;
                 s = currentSolution.relocate(tabuLists[MOVE_10], bestScore);
+
                 break;
             }
             case MOVE_11: {
                 neighborhoodType = MOVE_11;
                 s = currentSolution.exchange(tabuLists[MOVE_11], bestScore);
+
                 break;
             }
             case MOVE_20: {
                 neighborhoodType = MOVE_20;
                 s = currentSolution.orOpt(tabuLists[MOVE_20], bestScore);
+
                 break;
             }
             case MOVE_21: {
                 neighborhoodType = MOVE_21;
                 s = currentSolution.crossExchange(tabuLists[MOVE_21], bestScore);
+
                 break;
             }
             case TWO_OPT: {
                 neighborhoodType = TWO_OPT;
                 s = currentSolution.twoOpt(tabuLists[TWO_OPT], bestScore);
+
                 break;
             }
             default: {
@@ -158,7 +163,6 @@ void TabuSearch::runPostOptimization(json &log) {
     auto start = high_resolution_clock::now();
 
     runEjection(bestSolution);
-
     json jDroneBestEjection(bestSolution.droneTripList);
     json jTechBestEjection(bestSolution.techTripList);
     log["best_ejection"] = std::to_string(bestSolution.getScore()) + " == "
@@ -166,7 +170,6 @@ void TabuSearch::runPostOptimization(json &log) {
                            + jTechBestEjection.dump();
 
 //    std::cout << "Ejection: " << log["best_ejection"].dump(4) << std::endl;
-
 
     runInterRoute(bestSolution);
     json jDroneBestInter(bestSolution.droneTripList);
@@ -176,9 +179,7 @@ void TabuSearch::runPostOptimization(json &log) {
                         + jTechBestInter.dump();
 
 //    std::cout << "Inter: " << log["best_inter"].dump(4) << std::endl;
-
     runIntraRoute(bestSolution);
-
     json jDroneBestIntra(bestSolution.droneTripList);
     json jTechBestIntra(bestSolution.techTripList);
     log["best_intra"] = std::to_string(bestSolution.getScore()) + " == "
@@ -193,8 +194,10 @@ void TabuSearch::runInterRoute(Solution &solution) {
     auto rng = std::default_random_engine(std::chrono::system_clock::now()
                                                   .time_since_epoch()
                                                   .count());
-    std::vector<InterRouteType> order{INTER_RELOCATE, INTER_CROSS_EXCHANGE, INTER_EXCHANGE, INTER_OR_OPT,
-                                      INTER_TWO_OPT};
+    // std::vector<InterRouteType> order{INTER_RELOCATE, INTER_CROSS_EXCHANGE, INTER_EXCHANGE, INTER_OR_OPT,
+    //                                   INTER_TWO_OPT};
+    
+    std::vector<InterRouteType> order{INTER_RELOCATE, INTER_EXCHANGE, INTER_OR_OPT, INTER_CROSS_EXCHANGE};
 
     double score = solution.getScore();
     double newScore;
@@ -273,13 +276,15 @@ void TabuSearch::runInterRoute(Solution &solution) {
             break;
         }
     }
+    std::cout <<"Done Inter Route" << "\n";
 }
 
 void TabuSearch::runIntraRoute(Solution &solution) {
     auto rng = std::default_random_engine(std::chrono::system_clock::now()
                                                   .time_since_epoch()
                                                   .count());
-    std::vector<IntraRouteType> order{INTRA_RELOCATE, INTRA_EXCHANGE, INTRA_OR_OPT, INTRA_TWO_OPT};
+    // std::vector<IntraRouteType> order{INTRA_RELOCATE, INTRA_EXCHANGE, INTRA_OR_OPT, INTRA_TWO_OPT};
+    std::vector<IntraRouteType> order{INTRA_RELOCATE, INTRA_EXCHANGE, INTRA_OR_OPT};
 
     double score = solution.getScore();
     double newScore;

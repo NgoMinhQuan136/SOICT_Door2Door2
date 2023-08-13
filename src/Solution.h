@@ -64,7 +64,7 @@ public:
     static Solution *
     initSolution(Config &config, Input &input, InitType type = DISTANCE, double alpha1 = 0, double alpha2 = 0);
 
-    double getScore();
+    std::vector<std::vector<std::vector<double>>> getScore();
 
     std::vector<double> getScoreATrip(int tripIndex, TripType type);
 

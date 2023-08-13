@@ -3,8 +3,8 @@
     "isCycle": 1,
     "droneVelocity": 31.2928,
     "techVelocity": 15.557,
-    "numDrone": 3,
-    "numTech": 2,
+    "numDrone": 1,
+    "numTech": 1,
     "minTabuDuration": 5,
     "maxTabuDuration": 10,
     "droneLimitationFightTime": 7200,
@@ -15,10 +15,10 @@
     "tabuAlpha2": 1,
     "tabuBeta": 0.5,
     "tabuEpsilon": 1e-3,
-    "tabuNumRunPerDataSet": 2,
+    "tabuNumRunPerDataSet": 3,
     "maxEjectionLevel": 2,
     "dataPath": "data/",
-    "dataName": "20.5.1.txt",
+    "dataName": "6.5.2.txt",
     "ws": "D:/Study/Lab/Soict/",
     "resultFolder": "D:/Study/Lab/Soict/result/"
 }

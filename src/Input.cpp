@@ -3,6 +3,7 @@
 //
 
 #include <fstream>
+#include <sstream>
 #include <iostream>
 #include "Input.h"
 #include <cmath>

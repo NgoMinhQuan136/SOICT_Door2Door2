@@ -21,7 +21,7 @@ LocalSearch::LocalSearch(Config &conf, Input &inp) {
 
 void LocalSearch::run(json &log) {
     currentSolution = initSolution;
-    double currentScore = initSolution.getScore();
+    double currentScore = initSolution.getScore()[0][0][0];
     bestSolution = initSolution;
     double bestScore = currentScore;
 
@@ -35,7 +35,7 @@ void LocalSearch::run(json &log) {
             bool isImproved = false;
             s = currentSolution.relocate({}, bestScore);
             if (s != nullptr) {
-                double sScore = s->getScore();
+                double sScore = s->getScore()[0][0][0];
                 if (sScore < bestScore) {
                     isImproved = true;
                     bestSolution = *s;
@@ -48,7 +48,7 @@ void LocalSearch::run(json &log) {
 
             s = currentSolution.exchange({}, bestScore);
             if (s != nullptr) {
-                double sScore = s->getScore();
+                double sScore = s->getScore()[0][0][0];
                 if (sScore < bestScore) {
                     isImproved = true;
                     bestSolution = *s;

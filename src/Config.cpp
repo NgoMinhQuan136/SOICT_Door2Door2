@@ -27,8 +27,8 @@ Config::Config() {
     minTabuDuration = 5;
     maxTabuDuration = 10;
 
-    droneLimitationFightTime = 120000;
-    sampleLimitationWaitingTime = 60000;
+    droneLimitationFightTime = 7200;
+    sampleLimitationWaitingTime = 3600;
 
     tabuMaxIter = 200;
     tabuNotImproveIter = 200;

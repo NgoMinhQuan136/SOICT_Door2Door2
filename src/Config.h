@@ -12,8 +12,8 @@ class Config {
 public:
     double droneVelocity;
     double techVelocity;
-    int droneLimitationFightTime; //minutes
-    int sampleLimitationWaitingTime; //minutes
+    int droneLimitationFightTime; 
+    int sampleLimitationWaitingTime; 
     int numTech;
     int numDrone;
 

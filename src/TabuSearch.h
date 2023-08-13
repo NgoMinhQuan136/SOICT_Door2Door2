@@ -22,6 +22,9 @@ public:
     Solution initSolution;
     Solution currentSolution;
     Solution bestSolution;
+    Solution bestFeasibleSolution;
+    Solution solutiontest1;
+    Solution solutiontest2;
 
     int tabuDuration{};
     double alpha1{};

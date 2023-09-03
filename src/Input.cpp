@@ -73,10 +73,7 @@ Input::Input(double droneVelocity, double techVelocity, int limitationFightTime,
             if ((demand[i] > config.droneCapacity) || (typeService[i] == 1)) {
                 cusOnlyServedByTech[i] = true;
             }
-            // if (droneTimes[0][i] > limitationFightTime) {
-            //     cusOnlyServedByTech[i] = true;
-            // }
-            // std::cout << " Demand of cus " << i << " : " << demand[i] << " | " << typeService[i] << "\n";  
+            // std::cout << " Demand of cus " << i << " : " << demand[i] << " | " << cusOnlyServedByTech[i] << "\n";  
         }
 
         size_t beg = path.find_last_of("//");

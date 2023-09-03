@@ -19,7 +19,6 @@ int main(int argc, char **argv)
     std::ifstream configFile(configFilePath);
     json jConfig = json::parse(configFile);
     //        configFile >> jConfig;
-    std::cout << "Run Main \n";
     config.droneVelocity = jConfig["droneVelocity"].get<double>();
     config.techVelocity = jConfig["techVelocity"].get<double>();
     config.numDrone = jConfig["numDrone"].get<int>();
@@ -42,7 +41,6 @@ int main(int argc, char **argv)
     config.dataName = jConfig["dataName"].get<std::string>();
     config.ws = jConfig["ws"].get<std::string>();
     config.resultFolder = jConfig["resultFolder"].get<std::string>();
-    std::cout << "Run Main 1\n";
     std::vector<std::string> paths = Utils::glob(config.ws + config.dataPath, config.dataName);
 
     json logAll;
@@ -53,7 +51,6 @@ int main(int argc, char **argv)
         Input input(config.droneVelocity, config.techVelocity, config.droneLimitationFightTime, path);
         input.truck_Input(input, truck_path);
         json logDataSet;
-        std::cout <<"File OKE\n";
         for (int run = 0; run < config.tabuNumRunPerDataSet; run++)
         {
             std::cout << "start run: " << run + 1 << std::endl;

@@ -1,10 +1,10 @@
 {
     "type": "tabu",
     "isCycle": 1,
-    "droneVelocity": 31.2928,
+    "droneVelocity": 20.8619,
     "techVelocity": 15.557,
-    "numDrone": 1,
-    "numTech": 1,
+    "numDrone": 3,
+    "numTech": 3,
     "minTabuDuration": 5,
     "maxTabuDuration": 10,
     "droneLimitationFightTime": 7200,
@@ -15,10 +15,10 @@
     "tabuAlpha2": 1,
     "tabuBeta": 0.5,
     "tabuEpsilon": 1e-3,
-    "tabuNumRunPerDataSet": 3,
+    "tabuNumRunPerDataSet": 1,
     "maxEjectionLevel": 2,
     "dataPath": "data/",
-    "dataName": "6.5.2.txt",
+    "dataName": "10.5.1.txt",
     "ws": "D:/Study/Lab/Soict/",
-    "resultFolder": "D:/Study/Lab/Soict/result/"
+    "resultFolder": "D:/Study/Lab/Soict/result/50percent/"
 }

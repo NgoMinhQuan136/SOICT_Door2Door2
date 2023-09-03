@@ -11,7 +11,7 @@ using json = nlohmann::json;
 int main(int argc, char **argv)
 {
     Config config;
-    std::string configFilePath = "D:\\Study\\Lab\\Soict\\config.json";
+    std::string configFilePath = "D:\\Study\\Lab\\Soictv1\\config.json";
     if (argc == 2)
     {
         configFilePath = argv[1];
@@ -19,7 +19,6 @@ int main(int argc, char **argv)
     std::ifstream configFile(configFilePath);
     json jConfig = json::parse(configFile);
     //        configFile >> jConfig;
-
     config.droneVelocity = jConfig["droneVelocity"].get<double>();
     config.techVelocity = jConfig["techVelocity"].get<double>();
     config.numDrone = jConfig["numDrone"].get<int>();
@@ -42,11 +41,10 @@ int main(int argc, char **argv)
     config.dataName = jConfig["dataName"].get<std::string>();
     config.ws = jConfig["ws"].get<std::string>();
     config.resultFolder = jConfig["resultFolder"].get<std::string>();
-
     std::vector<std::string> paths = Utils::glob(config.ws + config.dataPath, config.dataName);
 
     json logAll;
-    std::string truck_path = "D:\\Study\\Lab\\Soict\\data\\Truck_config.json";
+    std::string truck_path = "D:\\Study\\Lab\\Soictv1\\data\\Truck_config.json";
     for (const std::string &path : paths)
     {
         std::cout << path << std::endl;
@@ -56,7 +54,6 @@ int main(int argc, char **argv)
         for (int run = 0; run < config.tabuNumRunPerDataSet; run++)
         {
             std::cout << "start run: " << run + 1 << std::endl;
-
             if (config.type == "lcs")
             {   
                 LocalSearch localSearch(config, input);
@@ -91,7 +88,6 @@ int main(int argc, char **argv)
             else
             {   
                 TabuSearch tabuSearch(config, input);
-                // std::cout << "OKE NOW 3: " << std::endl;
                 if (tabuSearch.initSolution.droneTripList.empty() && tabuSearch.initSolution.techTripList.empty())
                 {
                     std::cout << "Infeasible!" << std::endl;
@@ -111,23 +107,23 @@ int main(int argc, char **argv)
                 {
                     std::cout << "loi khi chay tabu!" << std::endl;
                 }
-                try
-                {
-                    std::cout << "=> run post optim: " << run + 1 << std::endl;
-                    tabuSearch.runPostOptimization(log);
-                    std::cout << "=> done post optim: " << run + 1 << std::endl;
-                }
-                catch (...)
-                {
-                    std::cout << "loi khi chay post optim!" << std::endl;
-                }
+                // try
+                // {
+                //     std::cout << "=> run post optim: " << run + 1 << std::endl;
+                //     tabuSearch.runPostOptimization(log);
+                //     std::cout << "=> done post optim: " << run + 1 << std::endl;
+                // }
+                // catch (...)
+                // {
+                //     std::cout << "loi khi chay post optim!" << std::endl;
+                // }
 
                 std::ofstream o(
                     config.resultFolder + "result_" + input.dataSet + "_" + std::to_string(run + 1) + ".json");
                 o << std::setw(4) << log << std::endl;
                 json logRun;
                 logRun["score"] = tabuSearch.bestSolution.getScore();
-                logRun["time"] = (unsigned int)log["tabu_time"] + (unsigned int)log["post_optimization_time"];
+                // logRun["time"] = (unsigned int)log["tabu_time"] + (unsigned int)log["post_optimization_time"];
                 logDataSet[std::to_string(run)] = logRun;
                 o.close();
             }

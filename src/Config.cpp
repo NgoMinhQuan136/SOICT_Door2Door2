@@ -5,14 +5,16 @@
 #include "Config.h"
 
 Config::Config() {
-    droneVelocity = 31.2928;
+    droneVelocity = 20.8619;
     droneWeight = 1.5;
     droneTakeoffSpeed = 15.6464;
-    droneCruiseSpeed = 31.2928;
+    droneCruiseSpeed = 20.8619;
     droneLandingSpeed = 7.8232;
     cruiseAlt = 50;
     droneCapacity = 2.27;
-    droneBatteryPower = 457503;
+    droneBatteryPower = 904033;
+    alpha = 0.1745329252;
+    g = 9.8;
 
     k1 = 0.8554;
     k2 = 0.3051;
@@ -27,8 +29,8 @@ Config::Config() {
     minTabuDuration = 5;
     maxTabuDuration = 10;
 
-    droneLimitationFightTime = 120000;
-    sampleLimitationWaitingTime = 60000;
+    droneLimitationFightTime = 7200;
+    sampleLimitationWaitingTime = 3600;
 
     tabuMaxIter = 200;
     tabuNotImproveIter = 200;
@@ -41,7 +43,7 @@ Config::Config() {
     isCycle = false;
     dataPath = "data/";
     dataName = "6.5.2.txt";
-    ws = "D:/Study/Lab/Soict/";
+    ws = "D:/Study/Lab/Soictv1/";
     resultFolder = ws + "result/";
     
 }

@@ -52,7 +52,7 @@ public:
     Config config;
     Input input;
     std::vector<std::vector<std::vector<int>>> droneTripList;
-    std::vector<std::vector<int>> techTripList;
+    std::vector<std::vector<std::vector<int>>> techTripList;
 
     std::map<std::string, std::string> ext;
     double c{}, cz{}, dz{}, alpha1{}, alpha2{}, ez{} , alpha3{};
@@ -63,8 +63,8 @@ public:
 
     static Solution *
     initSolution(Config &config, Input &input, InitType type = DISTANCE, double alpha1 = 0, double alpha2 = 0);
-
-    double getScore();
+    
+    std::vector<std::vector<std::vector<double>>> getScore();
 
     std::vector<double> getScoreATrip(int tripIndex, TripType type);
 
@@ -94,6 +94,8 @@ public:
     void logConsole();
     std::string toString();
 
+    bool checkFeasibleDroneTrip();
+    bool checkFeasibleSolution();
 
 
 private:

@@ -32,6 +32,7 @@ public:
     int tabuNumRunPerDataSet;
     double tabuAlpha1;
     double tabuAlpha2;
+    double tabuAlpha3;
     double tabuBeta;
     double tabuEpsilon;
 

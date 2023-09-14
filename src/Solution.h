@@ -55,33 +55,37 @@ public:
     std::vector<std::vector<std::vector<int>>> techTripList;
 
     std::map<std::string, std::string> ext;
-    double c{}, cz{}, dz{}, alpha1{}, alpha2{}, ez{} , alpha3{};
+    double c{};
+    double cz{}; //over waiting time
+    double dz{}; //over weight of truck or drone
+    double alpha1{}, alpha2{}, alpha3{};
+    double ez{}; //over energy of drone
 
-    Solution(Config &config, Input &input, double alpha1, double alpha2);
+    Solution(Config &config, Input &input, double alpha1, double alpha2, double alpha3);
 
     Solution();
 
     static Solution *
-    initSolution(Config &config, Input &input, InitType type = DISTANCE, double alpha1 = 0, double alpha2 = 0);
+    initSolution(Config &config, Input &input, InitType type = DISTANCE, double alpha1 = 1, double alpha2 = 1, double alpha3 = 1);
     
     std::vector<std::vector<std::vector<double>>> getScore();
 
     std::vector<double> getScoreATrip(int tripIndex, TripType type);
 
-    Solution *relocate(const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
+    Solution *relocate(Solution &bestFeasibleSolution, bool &isImproved, const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
                        RouteType type = ALL);
 
-    Solution *exchange(const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
+    Solution *exchange(Solution &bestFeasibleSolution, bool &isImproved, const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
                        RouteType type = ALL);
 
-    Solution *orOpt(const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
+    Solution *orOpt(Solution &bestFeasibleSolution, bool &isImproved, const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
                     RouteType type = ALL, int dis = 1);
 
     Solution *
-    crossExchange(const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
+    crossExchange(Solution &bestFeasibleSolution, bool &isImproved, const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
                   RouteType type = ALL, int dis1 = 1, int dis2 = 0);
 
-    Solution *twoOpt(const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
+    Solution *twoOpt(Solution &bestFeasibleSolution, bool &isImproved, const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
                      RouteType type = ALL);
 
     Solution ejection();
@@ -92,6 +96,7 @@ public:
 
     void perturbation();
     void logConsole();
+    void print();
     std::string toString();
 
     bool checkFeasibleDroneTrip();

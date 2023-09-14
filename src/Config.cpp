@@ -11,7 +11,7 @@ Config::Config() {
     droneCruiseSpeed = 20.8619;
     droneLandingSpeed = 7.8232;
     cruiseAlt = 50;
-    droneCapacity = 2.27;
+    droneCapacity = 2.7;
     droneBatteryPower = 904033;
     alpha = 0.1745329252;
     g = 9.8;
@@ -36,6 +36,7 @@ Config::Config() {
     tabuNotImproveIter = 200;
     tabuAlpha1 = 1;
     tabuAlpha2 = 1;
+    tabuAlpha3 = 1;
     tabuBeta = 0.5;
     tabuEpsilon = 1e-3;
     tabuNumRunPerDataSet = 1;

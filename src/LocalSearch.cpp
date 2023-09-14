@@ -33,7 +33,7 @@ void LocalSearch::run(json &log) {
         std::cout << it << std::endl;
         while (true) {
             bool isImproved = false;
-            s = currentSolution.relocate({}, bestScore);
+            // s = currentSolution.relocate({}, bestScore);
             if (s != nullptr) {
                 double sScore = s->getScore()[0][0][0];
                 if (sScore < bestScore) {
@@ -46,7 +46,7 @@ void LocalSearch::run(json &log) {
                 }
             }
 
-            s = currentSolution.exchange({}, bestScore);
+            // s = currentSolution.exchange({}, bestScore);
             if (s != nullptr) {
                 double sScore = s->getScore()[0][0][0];
                 if (sScore < bestScore) {

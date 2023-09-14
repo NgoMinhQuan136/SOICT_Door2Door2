@@ -19,16 +19,14 @@ public:
     Config config;
     Input input;
 
-    Solution initSolution;
-    Solution currentSolution;
-    Solution bestSolution;
-    Solution bestFeasibleSolution;
-    Solution bestSol;
-    Solution solutiontest2;
+    Solution initSolution; //lời giải khởi tạo ban đầu
+    Solution currentSolution; // lời giải đang xét 
+    Solution bestFeasibleSolution; // lời giải feasible, tốt nhất từ đầu đến giờ
 
     int tabuDuration{};
     double alpha1{};
     double alpha2{};
+    double alpha3{};
 
     TabuSearch();
 
@@ -44,7 +42,7 @@ public:
 
     static void runIntraRoute(Solution &solution);
 
-    void updatePenalty(double dz, double cz);
+    void updatePenalty(double dz, double cz, double ez);
 };
 
 

@@ -31,6 +31,7 @@ int main(int argc, char **argv)
     config.tabuNotImproveIter = jConfig["tabuNotImproveIter"].get<int>();
     config.tabuAlpha1 = jConfig["tabuAlpha1"].get<double>();
     config.tabuAlpha2 = jConfig["tabuAlpha2"].get<double>();
+    config.tabuAlpha3 = jConfig["tabuAlpha3"].get<double>();
     config.tabuBeta = jConfig["tabuBeta"].get<double>();
     config.tabuEpsilon = jConfig["tabuEpsilon"].get<double>();
     config.tabuNumRunPerDataSet = jConfig["tabuNumRunPerDataSet"].get<int>();
@@ -122,7 +123,7 @@ int main(int argc, char **argv)
                     config.resultFolder + "result_" + input.dataSet + "_" + std::to_string(run + 1) + ".json");
                 o << std::setw(4) << log << std::endl;
                 json logRun;
-                logRun["score"] = tabuSearch.bestSolution.getScore();
+                logRun["score"] = tabuSearch.bestFeasibleSolution.getScore();
                 // logRun["time"] = (unsigned int)log["tabu_time"] + (unsigned int)log["post_optimization_time"];
                 logDataSet[std::to_string(run)] = logRun;
                 o.close();

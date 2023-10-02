@@ -173,7 +173,6 @@ Solution *Solution::initSolution(Config &config, Input &input, InitType type, do
         }
     }
     best->logConsole();
-    std::cout << "Init Best :" << bestFeasibleScore << "\n";
     return best;
     
 }
@@ -633,6 +632,7 @@ double Solution::getNewScore(Score &score){
     double droneTime = 0;
     dz = 0; cz = 0; ez = 0;
     for(int i = 0; i < droneTripList.size(); i++){
+        droneTime = 0;
         for(int j = 0; j < droneTripList[i].size(); j++){
             droneTime += score.droneTime[i][j];
             cz += score.droneWaitingTime[i][j];
@@ -643,6 +643,7 @@ double Solution::getNewScore(Score &score){
             allDroneTime = droneTime;
         } 
     }
+
     for(int i = 0; i < techTripList.size(); i++){
         for(int j = 0; j < techTripList[i].size(); j++){
             if(score.truckCompleteTime[i][j] > allTechTime){

@@ -46,7 +46,7 @@ public:
     double c4 ;
     double c5 ;
 
-    double droneWeight ; // drone weight; 
+    double W ; // drone weight; 
     double g ; // gravitational constant;
     double alpha ; // angle off attack;
     double droneTakeoffSpeed ;

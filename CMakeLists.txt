@@ -16,6 +16,6 @@ set(CMAKE_CXX_STANDARD 17)
 # build tren windows thi bat len
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libgcc -static-libstdc++ -static")
 
-add_executable(Door2Door2 src/Config.cpp src/Input.cpp src/Solution.cpp src/TabuSearch.cpp main.cpp src/Utils.cpp src/Utils.h src/Random.h src/LocalSearch.cpp src/LocalSearch.h)
+add_executable(Door2Door2 src/Config.cpp src/Input.cpp src/Score.cpp src/Solution.cpp src/TabuSearch.cpp main.cpp src/Utils.cpp src/Utils.h src/Random.h src/LocalSearch.cpp src/LocalSearch.h )
 target_link_libraries(Door2Door2 PRIVATE nlohmann_json::nlohmann_json)
 

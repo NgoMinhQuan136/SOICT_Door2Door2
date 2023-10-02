@@ -11,6 +11,7 @@
 #include "iostream"
 #include "Solution.h"
 #include "nlohmann/json.hpp"
+#include "Score.h"
 
 using json = nlohmann::json;
 
@@ -22,6 +23,8 @@ public:
     Solution initSolution; //lời giải khởi tạo ban đầu
     Solution currentSolution; // lời giải đang xét 
     Solution bestFeasibleSolution; // lời giải feasible, tốt nhất từ đầu đến giờ
+
+    Score score;
 
     int tabuDuration{};
     double alpha1{};

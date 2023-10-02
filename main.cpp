@@ -5,6 +5,7 @@
 #include "src/Utils.h"
 #include "src/LocalSearch.h"
 #include <fstream>
+#include <ctime>
 
 using json = nlohmann::json;
 
@@ -44,6 +45,18 @@ int main(int argc, char **argv)
     config.resultFolder = jConfig["resultFolder"].get<std::string>();
     std::vector<std::string> paths = Utils::glob(config.ws + config.dataPath, config.dataName);
 
+    time_t now = time(NULL);
+    std::string dt_time = ctime(&now);
+    dt_time[dt_time.size() - 1] = ' ';
+    for(int i = 0 ; i < dt_time.size(); i++){
+        if (dt_time[i] == ':'){
+            dt_time[i] = '_';
+        }
+        
+    }
+    std::cout << dt_time << "A" <<"\n";
+    
+
     json logAll;
     std::string truck_path = "D:\\Study\\Lab\\Soictv1\\data\\Truck_config.json";
     for (const std::string &path : paths)
@@ -82,7 +95,7 @@ int main(int argc, char **argv)
                     config.resultFolder + "result_" + input.dataSet + "_" + std::to_string(run + 1) + ".json");
                 o << std::setw(4) << log << std::endl;
                 json logRun;
-                logRun["score"] = localSearch.bestSolution.getScore();
+                // logRun["score"] = localSearch.bestSolution.getScore();
                 logDataSet[std::to_string(run)] = logRun;
                 o.close();
             }
@@ -118,12 +131,10 @@ int main(int argc, char **argv)
                 // {
                 //     std::cout << "loi khi chay post optim!" << std::endl;
                 // }
-
-                std::ofstream o(
-                    config.resultFolder + "result_" + input.dataSet + "_" + std::to_string(run + 1) + ".json");
+                std::ofstream o(config.resultFolder + "result_" + input.dataSet +  "_" + std::to_string(run + 1) + "_" +  dt_time + ".json");
                 o << std::setw(4) << log << std::endl;
                 json logRun;
-                logRun["score"] = tabuSearch.bestFeasibleSolution.getScore();
+                // logRun["score"] = tabuSearch.bestFeasibleSolution.getScore();
                 // logRun["time"] = (unsigned int)log["tabu_time"] + (unsigned int)log["post_optimization_time"];
                 logDataSet[std::to_string(run)] = logRun;
                 o.close();

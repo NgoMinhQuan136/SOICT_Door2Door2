@@ -10,12 +10,14 @@
 #include "iostream"
 #include "Solution.h"
 #include "nlohmann/json.hpp"
+#include "Score.h"
 
 using json = nlohmann::json;
 
 class LocalSearch {
     Config config;
     Input input;
+    Score score;
 
     Solution currentSolution;
 

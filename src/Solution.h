@@ -6,6 +6,7 @@
 #include "Input.h"
 #include "map"
 #include "limits"
+#include "Score.h"
 
 enum InitType {
     ANGLE,
@@ -68,24 +69,25 @@ public:
     static Solution *
     initSolution(Config &config, Input &input, InitType type = DISTANCE, double alpha1 = 1, double alpha2 = 1, double alpha3 = 1);
     
-    std::vector<std::vector<std::vector<double>>> getScore();
+    std::vector<std::vector<std::vector<double>>> getScore(Score &score);
+    double getNewScore(Score &score);
 
     std::vector<double> getScoreATrip(int tripIndex, TripType type);
 
-    Solution *relocate(Solution &bestFeasibleSolution, bool &isImproved, const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
+    Solution *relocate(Solution &bestFeasibleSolution, bool &isImproved, Score &score, const std::vector<std::string> &tabuList, double &bestScore ,
                        RouteType type = ALL);
 
-    Solution *exchange(Solution &bestFeasibleSolution, bool &isImproved, const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
+    Solution *exchange(Solution &bestFeasibleSolution, bool &isImproved, Score &score, const std::vector<std::string> &tabuList, double &bestScore,
                        RouteType type = ALL);
 
-    Solution *orOpt(Solution &bestFeasibleSolution, bool &isImproved, const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
+    Solution *orOpt(Solution &bestFeasibleSolution, bool &isImproved, Score &score, const std::vector<std::string> &tabuList, double &bestScore,
                     RouteType type = ALL, int dis = 1);
 
     Solution *
-    crossExchange(Solution &bestFeasibleSolution, bool &isImproved, const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
+    crossExchange(Solution &bestFeasibleSolution, bool &isImproved, Score &score, const std::vector<std::string> &tabuList, double &bestScore,
                   RouteType type = ALL, int dis1 = 1, int dis2 = 0);
 
-    Solution *twoOpt(Solution &bestFeasibleSolution, bool &isImproved, const std::vector<std::string> &tabuList, double bestScore = std::numeric_limits<double>::max(),
+    Solution *twoOpt(Solution &bestFeasibleSolution, bool &isImproved, Score &score, const std::vector<std::string> &tabuList, double &bestScore,
                      RouteType type = ALL);
 
     Solution ejection();
@@ -100,7 +102,7 @@ public:
     std::string toString();
 
     bool checkFeasibleDroneTrip();
-    bool checkFeasibleSolution();
+    bool checkFeasibleSolution(Score score);
 
 
 private:

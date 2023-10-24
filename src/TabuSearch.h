@@ -25,6 +25,7 @@ public:
     Solution bestFeasibleSolution; // lời giải feasible, tốt nhất từ đầu đến giờ
 
     Score score;
+    Score score1;
 
     int tabuDuration{};
     double alpha1{};

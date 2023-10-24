@@ -8,6 +8,7 @@
 #include <ctime>
 
 using json = nlohmann::json;
+using namespace std::chrono;
 
 int main(int argc, char **argv)
 {
@@ -111,6 +112,8 @@ int main(int argc, char **argv)
                 log["num_tech"] = config.numTech;
                 log["num_drone"] = config.numDrone;
                 log["data_set"] = input.dataSet;
+                Solution init = tabuSearch.initSolution;
+                
                 try
                 {
                     std::cout << "=> run tabu: " << run + 1 << std::endl;
@@ -121,6 +124,8 @@ int main(int argc, char **argv)
                 {
                     std::cout << "loi khi chay tabu!" << std::endl;
                 }
+
+
                 // try
                 // {
                 //     std::cout << "=> run post optim: " << run + 1 << std::endl;
@@ -138,6 +143,7 @@ int main(int argc, char **argv)
                 // logRun["time"] = (unsigned int)log["tabu_time"] + (unsigned int)log["post_optimization_time"];
                 logDataSet[std::to_string(run)] = logRun;
                 o.close();
+                
             }
             std::cout << "=> done run: " << run + 1 << std::endl;
         }

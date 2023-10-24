@@ -8,6 +8,7 @@
 
 class Score {
 public:
+    
     //drone
     std::vector<std::vector<double>> droneTime;// Thời gian hoàn thành mỗi trip Drone
     std::vector<std::vector<double>> droneDemand;// Demand từng trip Drone
@@ -20,8 +21,11 @@ public:
     std::vector<std::vector<double>> truckDemand; // Tổng Demand 1 trip Truck
     std::vector<std::vector<double>> truckCompleteTime; // Thời điểm hoàn thành 1 trip Truck
 
-    void updateDroneScore(std::vector<std::vector<std::vector<int>>> droneTripList, Score &score, Input input, Config config, int droneIndex, int tripIndex, int index);
-    void updateTruckScore(std::vector<std::vector<std::vector<int>>> techTripList, Score &score, Input input, Config config, int techIndex, int techTripIndex, int index);
+    double countEnergy(int cus1, int cus2, double demand, Input &input);
+    int check_ratio1(double time, Input &input);
+    double countTimeTruck1(double startTime, double distance, Input &input);
+    void updateDroneScore(std::vector<std::vector<std::vector<int>>> droneTripList, Score &score, Input &input, int droneIndex, int tripIndex, int index);
+    void updateTruckScore(std::vector<std::vector<std::vector<int>>> techTripList, Score &score, Input &input, int techIndex, int techTripIndex, int index);
 
 };
 

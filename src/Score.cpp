@@ -1,3 +1,4 @@
+#pragma comment(linker, "/STACK:2000000")
 #include "Score.h"
 #include "math.h"
 #include <chrono>
@@ -5,6 +6,7 @@
 using namespace std::chrono;
 
 Config config2;
+
 double _k1 = config2.k1;
 double _k2 = config2.k2;
 double _c1 = config2.c1;
@@ -36,7 +38,7 @@ double horizontal1(double demand, double speed){
     return P;
 }
 
-double countEnergy(int cus1, int cus2, Input input, double demand){
+double Score::countEnergy(int cus1, int cus2, double demand, Input &input){
     double time = input.droneTimes[cus1][cus2];
     double total_Energy = 0;
     total_Energy += landing_Takeoff(demand, _takeoff_speed) * _takeoff_time;
@@ -45,7 +47,7 @@ double countEnergy(int cus1, int cus2, Input input, double demand){
     return total_Energy;
 }
 
-int check_ratio1(Input input, double time){
+int Score::check_ratio1(double time, Input &input){
     int i;
     for (i = 0; i < input.ratio_v.size(); i++){
         if (i * 3600 <= time && time < (i + 1) * 3600){
@@ -55,9 +57,9 @@ int check_ratio1(Input input, double time){
     return i;
 }
 
-double countTimeTruck1(double startTime, double distance, Input input){ 
+double Score::countTimeTruck1(double startTime, double distance, Input &input){ 
     double t = startTime;
-    int i = check_ratio1(input, startTime);
+    int i = check_ratio1(startTime, input);
     double time;
     double round = 0;
     time = t + distance/(input.truckV_max*input.ratio_v[i]);
@@ -66,16 +68,15 @@ double countTimeTruck1(double startTime, double distance, Input input){
             round++;
             time = time - 12 * 3600;
         }
-        distance = distance - input.truckV_max * input.ratio_v[i] * (i+1 - t);
-        t = i+1;
+        distance = distance - input.truckV_max * input.ratio_v[i] * ((i+1) * 3600 - t);
+        t = (i+1) * 3600;
         time = t + distance/(input.truckV_max*input.ratio_v[i+1]);
         i++;
     }
     return ( time + round*12 *3600 - startTime);  
 }
 
-void Score::updateDroneScore(std::vector<std::vector<std::vector<int>>> droneTripList, Score &score, Input input, Config config, int droneIndex, int tripIndex, int index){
-    // auto start = high_resolution_clock::now();
+void Score::updateDroneScore(std::vector<std::vector<std::vector<int>>> droneTripList, Score &score, Input &input, int droneIndex, int tripIndex, int index){
     std::vector<double> cusCompleteTime(input.numCus + 1, 0);
     double newWaitingTime = 0;
 
@@ -89,7 +90,7 @@ void Score::updateDroneScore(std::vector<std::vector<std::vector<int>>> droneTri
         }
     }else{
         //update demand of drone
-        double newDemand = input.demand[droneTripList[droneIndex][tripIndex][0]] ;
+        double newDemand = input.demand[droneTripList[droneIndex][tripIndex][0]];
         double newDroneTime = input.droneTimes[0][droneTripList[droneIndex][tripIndex][0]] + input.serviceTimeByDrone[droneTripList[droneIndex][tripIndex][0]];
         cusCompleteTime[droneTripList[droneIndex][tripIndex][0]] = newDroneTime;
         for (int i = 0; i < droneTripList[droneIndex][tripIndex].size() - 1; i++ ){
@@ -103,10 +104,9 @@ void Score::updateDroneScore(std::vector<std::vector<std::vector<int>>> droneTri
 
         //update waiting time
         for(int k : droneTripList[droneIndex][tripIndex]){
-            newWaitingTime += std::max(0., newDroneTime - cusCompleteTime[k] - config.sampleLimitationWaitingTime);
+            newWaitingTime += std::max(0., newDroneTime - cusCompleteTime[k] - config2.sampleLimitationWaitingTime);
         }
         score.droneWaitingTime[droneIndex][tripIndex] = newWaitingTime;
-
         //update energy
         while (score.droneEnergy[droneIndex][tripIndex].size() != droneTripList[droneIndex][tripIndex].size()){
             if (score.droneEnergy[droneIndex][tripIndex].size() < droneTripList[droneIndex][tripIndex].size()){
@@ -127,20 +127,17 @@ void Score::updateDroneScore(std::vector<std::vector<std::vector<int>>> droneTri
                 previousCus = droneTripList[droneIndex][tripIndex][index - 1];
             }
         for(int i = index; i < droneTripList[droneIndex][tripIndex].size(); i++){
-            score.droneEnergy[droneIndex][tripIndex][i] = countEnergy(previousCus, droneTripList[droneIndex][tripIndex][index], input, totalDemand);
+            score.droneEnergy[droneIndex][tripIndex][i] = countEnergy(previousCus, droneTripList[droneIndex][tripIndex][index], totalDemand, input);
             totalEnergy += score.droneEnergy[droneIndex][tripIndex][i];
             totalDemand += input.demand[droneTripList[droneIndex][tripIndex][index]];
             previousCus = droneTripList[droneIndex][tripIndex][index];
         }
-        totalEnergy += countEnergy(previousCus, 0, input, totalDemand);
-        score.droneOverEnergy[droneIndex][tripIndex] = std::max(0., totalEnergy - config.droneBatteryPower);
+        totalEnergy += countEnergy(previousCus, 0, totalDemand, input);
+        score.droneOverEnergy[droneIndex][tripIndex] = std::max(0., totalEnergy - config2.droneBatteryPower);
     }
-    // auto stop = high_resolution_clock::now();
-    // double timeTest = duration_cast<microseconds>(stop - start).count();
-    // std::cout << "Time Test :" << timeTest <<"\n";
 }
 
-void Score::updateTruckScore(std::vector<std::vector<std::vector<int>>> techTripList, Score &score, Input input, Config config,
+void Score::updateTruckScore(std::vector<std::vector<std::vector<int>>> techTripList, Score &score, Input &input,
                                                                                 int techIndex, int techTripIndex, int index){
     // update demand of truck
     double newDemand = 0;

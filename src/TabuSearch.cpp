@@ -25,17 +25,38 @@ void TabuSearch::run(json &log) {
     int findBest = 0;
     bool isImproved;
     currentSolution = initSolution;
-    double currentScore = initSolution.getScore(score)[0][0][0];
+    std::vector<std::vector<std::vector<double>>> point = initSolution.getScore(score);
+    double currentScore = point[0][0][0];
     std::cout << "CurScore :" << currentScore << "\n";
     std::cout << "NewScore :" << currentSolution.getNewScore(score) << "\n";
+    //         for(int i = 0; i < score.truckCompleteTime.size(); i++){
+    //             std::cout << " Truck Time : " << i << " : " <<"\n";
+    //             for(int j = 0; j < score.truckCompleteTime[i].size(); j++){
+    //                 std::cout << score.truckCompleteTime[i][j] <<" - ";
+    //                 for(int k = 0; k < score.truckTime[i][j].size(); k ++){
+    //                     std::cout << score.truckTime[i][j][k] << " | ";
+    //                 }
+    //                 std::cout <<"\n";  
+    //             }
+    //             std::cout <<"\n";  
+    //         }
+
+    // for (int i = 0; i < point[1].size(); i++){
+    //     std::cout << " Truck Time 1 : " << i << " : ";
+    //     for(int j = 0; j < point[1][i].size(); j++){
+    //         std::cout << point[1][i][j] <<" - ";
+    //     }
+    //     std::cout <<"\n";        
+    // }
+
     bestFeasibleSolution = currentSolution;
     double bestFeasibleScore = currentScore; // trong trường hợp init không phải feasible solution ?
     NeighborhoodType neighborhoodType;
     int actOrd;
     Solution *s;
+
     auto start = high_resolution_clock::now();
     int actOrderCycle = -1;
-    std::cout << "RUN TABU 1 \n";
 
     for (int it = 0; it < config.tabuMaxIter; it++) {
         actOrderCycle = (actOrderCycle + 1) % 5;
@@ -100,6 +121,7 @@ void TabuSearch::run(json &log) {
             currentSolution = *s;
             // std::vector<std::vector<std::vector<double>>> pointSolution = currentSolution.getScore();
             currentScore = currentSolution.getNewScore(score);
+
             json jDrone(currentSolution.droneTripList);
             json jTech(currentSolution.techTripList);
             // json jDroneDemand(pointSolution[1]);
@@ -108,6 +130,42 @@ void TabuSearch::run(json &log) {
             // json jTruckWaitingTime(pointSolution[4]);
             // json jOverEnergy(pointSolution[5]);
 
+            // std::vector<std::vector<std::vector<double>>> pointSolution = currentSolution.getScore(score1);
+            // std::cout << " Score : " << pointSolution[0][0][0] << "\n";
+            // std::cout << " New Score : " << currentScore <<"\n";
+
+            // for(int i = 0; i < score.truckCompleteTime.size(); i++){
+            //     std::cout << " Truck Time : " << i << " : " <<"\n";
+            //     for(int j = 0; j < score.truckCompleteTime[i].size(); j++){
+            //         std::cout << score.truckCompleteTime[i][j] <<" - ";
+            //         for(int k = 0; k < score.truckTime[i][j].size(); k ++){
+            //             std::cout << score.truckTime[i][j][k] << " | ";
+            //         }
+            //         std::cout <<"\n";  
+            //     }
+            //     std::cout <<"\n";  
+            // }
+
+            // for (int i = 0; i < pointSolution[1].size(); i++){
+            //     std::cout << " Truck Time 1 : " << i << " : ";
+            //     for(int j = 0; j < pointSolution[1][i].size(); j++){
+            //         std::cout << pointSolution[1][i][j] <<" - ";
+            //     }
+            //     std::cout <<"\n";        
+            // }
+
+            // for(int i = 0; i < score1.truckCompleteTime.size(); i++){
+            //     std::cout << " Truck Time A : " << i << " : " <<"\n";
+            //     for(int j = 0; j < score1.truckCompleteTime[i].size(); j++){
+            //         std::cout << score1.truckCompleteTime[i][j] <<" - ";
+            //         for(int k = 0; k < score1.truckTime[i][j].size(); k ++){
+            //             std::cout << score1.truckTime[i][j][k] << " | ";
+            //         }
+            //         std::cout <<"\n";  
+            //     }
+            //     std::cout <<"\n";  
+            // }
+            
             itLog["current"] = std::to_string(currentScore) + " == " + jDrone.dump() + " || " + jTech.dump();
             // itLog["cur_Demand"] = jDroneDemand.dump() + " || " + jTruckDemand.dump();
             // itLog["cur_WaitingTime"] = jDroneWaitingTime.dump() + " || " + jTruckWaitingTime.dump();

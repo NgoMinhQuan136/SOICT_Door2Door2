@@ -59,17 +59,22 @@ int Score::check_ratio1(double time, Input &input){
 
 double Score::countTimeTruck1(double startTime, double distance, Input &input){ 
     double t = startTime;
+    double round = 0;
+    while(t > 12 * 3600){
+        t = t - 12 * 3600;
+        round ++;
+    }
     int i = check_ratio1(startTime, input);
     double time;
-    double round = 0;
     time = t + distance/(input.truckV_max*input.ratio_v[i]);
     while (time > (i+1) * 3600){
-        if (time > 12 * 3600){
-            round++;
-            time = time - 12 * 3600;
-        }
         distance = distance - input.truckV_max * input.ratio_v[i] * ((i+1) * 3600 - t);
         t = (i+1) * 3600;
+        if (t == 12 * 3600){
+            round++;
+            i =  -1;
+            t = 0;
+        }
         time = t + distance/(input.truckV_max*input.ratio_v[i+1]);
         i++;
     }
@@ -91,14 +96,14 @@ void Score::updateDroneScore(std::vector<std::vector<std::vector<int>>> droneTri
     }else{
         //update demand of drone
         double newDemand = input.demand[droneTripList[droneIndex][tripIndex][0]];
-        double newDroneTime = input.droneTimes[0][droneTripList[droneIndex][tripIndex][0]] + input.serviceTimeByDrone[droneTripList[droneIndex][tripIndex][0]];
+        double newDroneTime = input.droneTimes[0][droneTripList[droneIndex][tripIndex][0]] + input.serviceTimeByDrone[droneTripList[droneIndex][tripIndex][0]] + _takeoff_time + _landing_time;
         cusCompleteTime[droneTripList[droneIndex][tripIndex][0]] = newDroneTime;
         for (int i = 0; i < droneTripList[droneIndex][tripIndex].size() - 1; i++ ){
             newDemand +=  input.demand[droneTripList[droneIndex][tripIndex][i + 1]];
-            newDroneTime += input.droneTimes[droneTripList[droneIndex][tripIndex][i]][droneTripList[droneIndex][tripIndex][i+1]];
+            newDroneTime += input.droneTimes[droneTripList[droneIndex][tripIndex][i]][droneTripList[droneIndex][tripIndex][i+1]] + _takeoff_time + _landing_time;
             cusCompleteTime[droneTripList[droneIndex][tripIndex][i]] = newDroneTime;
         }
-        newDroneTime += input.droneTimes[droneTripList[droneIndex][tripIndex].back()][0];
+        newDroneTime += input.droneTimes[droneTripList[droneIndex][tripIndex].back()][0] + _takeoff_time + _landing_time;
         score.droneDemand[droneIndex][tripIndex] = newDemand;
         score.droneTime[droneIndex][tripIndex] = newDroneTime;
 

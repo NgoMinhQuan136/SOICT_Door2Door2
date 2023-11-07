@@ -24,30 +24,12 @@ void TabuSearch::run(json &log) {
     int notImproveIter = 0;
     int findBest = 0;
     bool isImproved;
+    double testScore = 0;
     currentSolution = initSolution;
     std::vector<std::vector<std::vector<double>>> point = initSolution.getScore(score);
     double currentScore = point[0][0][0];
     std::cout << "CurScore :" << currentScore << "\n";
     std::cout << "NewScore :" << currentSolution.getNewScore(score) << "\n";
-    //         for(int i = 0; i < score.truckCompleteTime.size(); i++){
-    //             std::cout << " Truck Time : " << i << " : " <<"\n";
-    //             for(int j = 0; j < score.truckCompleteTime[i].size(); j++){
-    //                 std::cout << score.truckCompleteTime[i][j] <<" - ";
-    //                 for(int k = 0; k < score.truckTime[i][j].size(); k ++){
-    //                     std::cout << score.truckTime[i][j][k] << " | ";
-    //                 }
-    //                 std::cout <<"\n";  
-    //             }
-    //             std::cout <<"\n";  
-    //         }
-
-    // for (int i = 0; i < point[1].size(); i++){
-    //     std::cout << " Truck Time 1 : " << i << " : ";
-    //     for(int j = 0; j < point[1][i].size(); j++){
-    //         std::cout << point[1][i][j] <<" - ";
-    //     }
-    //     std::cout <<"\n";        
-    // }
 
     bestFeasibleSolution = currentSolution;
     double bestFeasibleScore = currentScore; // trong trường hợp init không phải feasible solution ?
@@ -65,13 +47,9 @@ void TabuSearch::run(json &log) {
         } else {
             actOrd = Random::get(1, 5);
         }
-//        actOrd = 4;
         json itLog;
         itLog["act"] = actOrd;
-//       std::cout << "act: " << actOrd << std::endl;
-//        auto start = high_resolution_clock::now();
         switch (actOrd) {
-            
             case MOVE_10: {
                 neighborhoodType = MOVE_10;
                 isImproved = false;
@@ -119,18 +97,18 @@ void TabuSearch::run(json &log) {
             // currentScore = currentSolution.getScore()[0][0][0];
             // itLog["old"] = std::to_string(currentScore) + " == " + jDroneOld.dump() + " || " + jTechOld.dump();
             currentSolution = *s;
-            // std::vector<std::vector<std::vector<double>>> pointSolution = currentSolution.getScore();
-            currentScore = currentSolution.getNewScore(score);
-
+            std::vector<std::vector<std::vector<double>>> pointSolution = currentSolution.getScore(score1);
+            currentScore = pointSolution[0][0][0];
+            // testScore = currentSolution.getScore(score1)[0][0][0];
             json jDrone(currentSolution.droneTripList);
             json jTech(currentSolution.techTripList);
-            // json jDroneDemand(pointSolution[1]);
-            // json jTruckDemand(pointSolution[2]);
-            // json jDroneWaitingTime(pointSolution[3]);
-            // json jTruckWaitingTime(pointSolution[4]);
-            // json jOverEnergy(pointSolution[5]);
+            json jDroneDemand(pointSolution[1]);
+            json jTruckDemand(pointSolution[2]);
+            json jDroneWaitingTime(pointSolution[3]);
+            json jTruckWaitingTime(pointSolution[4]);
+            json jOverEnergy(pointSolution[5]);
 
-            // std::vector<std::vector<std::vector<double>>> pointSolution = currentSolution.getScore(score1);
+            
             // std::cout << " Score : " << pointSolution[0][0][0] << "\n";
             // std::cout << " New Score : " << currentScore <<"\n";
 
@@ -167,11 +145,14 @@ void TabuSearch::run(json &log) {
             // }
             
             itLog["current"] = std::to_string(currentScore) + " == " + jDrone.dump() + " || " + jTech.dump();
+            // itLog["current_test"] = std::to_string(testScore);
             // itLog["cur_Demand"] = jDroneDemand.dump() + " || " + jTruckDemand.dump();
             // itLog["cur_WaitingTime"] = jDroneWaitingTime.dump() + " || " + jTruckWaitingTime.dump();
             // itLog["cur_OverEnergy"] = jOverEnergy.dump();
-            // itLog["cur_penalty"] = std::to_string(pointSolution[0][0][2]) + " || " + std::to_string(pointSolution[0][0][3]) + " || " 
-            //     + std::to_string(pointSolution[0][0][4]);
+            itLog["cur_timeTech"] = std::to_string(pointSolution[0][0][6]);
+            itLog["cur_timeDrone"] = std::to_string(pointSolution[0][0][5]);
+            itLog["cur_penalty"] = std::to_string(pointSolution[0][0][2]) + " || " + std::to_string(pointSolution[0][0][3]) + " || " 
+                + std::to_string(pointSolution[0][0][4]);
             if (isImproved) {
                 // bestFeasibleScore = bestFeasibleSolution.getNewScore(score);
                 notImproveIter = 0;
@@ -181,7 +162,6 @@ void TabuSearch::run(json &log) {
                 currentSolution.alpha1 = alpha1;
                 currentSolution.alpha2 = alpha2;
                 currentSolution.alpha3 = alpha3;
-                // std::cout << alpha1 << "| " << alpha2 << " |" << alpha3 << "|\n";
 
                 findBest = it;
             } else {
@@ -236,7 +216,7 @@ void TabuSearch::updatePenalty(double dz, double cz, double ez) {
         }
     } else {
         alpha1 /= 1 + config.tabuBeta;
-        if(alpha1 < 0.00001){
+        if(alpha1 < 0.000001){
             alpha1 = 1;
         }
     }
@@ -248,7 +228,7 @@ void TabuSearch::updatePenalty(double dz, double cz, double ez) {
         }
     } else {
         alpha2 /= 1 + config.tabuBeta;
-        if (alpha2 < 0.00001){
+        if (alpha2 < 0.000001){
             alpha2 = 1;
         }
     }
@@ -260,7 +240,7 @@ void TabuSearch::updatePenalty(double dz, double cz, double ez) {
         }
     } else {
         alpha3 /= 1 + config.tabuBeta;
-        if(alpha3 < 0.00001){
+        if(alpha3 < 0.000001){
             alpha3 = 1;
         }
     }

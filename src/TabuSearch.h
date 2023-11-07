@@ -23,6 +23,7 @@ public:
     Solution initSolution; //lời giải khởi tạo ban đầu
     Solution currentSolution; // lời giải đang xét 
     Solution bestFeasibleSolution; // lời giải feasible, tốt nhất từ đầu đến giờ
+    Solution testSolution;
 
     Score score;
     Score score1;

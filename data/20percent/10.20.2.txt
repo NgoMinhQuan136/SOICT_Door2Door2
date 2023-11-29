@@ -1,7 +1,7 @@
 number_truck 1
 number_drone 1
 droneLimitationFightTime(s) 3600
-Customers 6 
+Customers 10 
 Coordinate X		 Coordinate Y 		Demand		OnlyServicedBytruck		 ServiceTimeByTruck(s)		 ServiceTimeByDrone(s)
 7474.4989850661705	11809.84502549393	1.496291180363214   0	60 	30
 -2748.8704605975136	13281.446445594433	1.5362688893556733  0	60 	30

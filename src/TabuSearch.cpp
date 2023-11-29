@@ -13,8 +13,26 @@ using namespace std::chrono;
 using Random = effolkronium::random_static;
 using json = nlohmann::json;
 
+void countMove(std::vector<int> &moveCount, int move){
+    for( int i = 1; i <= 5; i++){
+        if (move == i ){
+            moveCount[i] ++;
+        }
+    }
+}
+
+bool checkMove(std::vector<int> moveCount, int move, int cycle){
+    if ( moveCount[move] > cycle){
+        return true;
+    }else{
+        return false;
+    }
+    
+}
+
 void TabuSearch::run(json &log) {
     std::map<NeighborhoodType, std::vector<std::string>> tabuLists;
+    std::vector<int> moveCount(6, 0);
     tabuLists[MOVE_10] = std::vector<std::string>();
     tabuLists[MOVE_11] = std::vector<std::string>();
     tabuLists[MOVE_20] = std::vector<std::string>();
@@ -45,10 +63,16 @@ void TabuSearch::run(json &log) {
         if (config.isCycle) {
             actOrd = actOrderCycle + 1;
         } else {
-            actOrd = Random::get(1, 5);
+            double cycle = it / 5;
+            do{
+                actOrd = Random::get(1, 5);
+            } while (checkMove(moveCount, actOrd, cycle));
+            
+            
         }
         json itLog;
         itLog["act"] = actOrd;
+        countMove(moveCount, actOrd);
         switch (actOrd) {
             case MOVE_10: {
                 neighborhoodType = MOVE_10;

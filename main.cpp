@@ -13,7 +13,7 @@ using namespace std::chrono;
 int main(int argc, char **argv)
 {
     Config config;
-    std::string configFilePath = "D:\\Study\\Lab\\Soictv1\\config.json";
+    std::string configFilePath = "D:\\Study\\Lab\\Soict\\config.json";
     if (argc == 2)
     {
         configFilePath = argv[1];

@@ -5,14 +5,14 @@
 #include "Config.h"
 
 Config::Config() {
-    droneVelocity = 31.2928;
+    droneVelocity = 15.6464;
     W = 1.5;
-    droneTakeoffSpeed = 15.6464;
-    droneCruiseSpeed = 31.2928;
-    droneLandingSpeed = 7.8232;
+    droneTakeoffSpeed = 7.8232;
+    droneCruiseSpeed = 15.6464;
+    droneLandingSpeed = 3.9116;
     cruiseAlt = 50;
     droneCapacity = 2.27;
-    droneBatteryPower = 904033;
+    droneBatteryPower = 291094;
     alpha = 0.1745329252;
     g = 9.8;
 
@@ -23,7 +23,7 @@ Config::Config() {
     c4 = 0.0296;
     c5 = 0.0279;
 
-    techVelocity = 31.2928;
+    techVelocity = 15.557;
     numDrone = 3;
     numTech = 3;
     minTabuDuration = 5;

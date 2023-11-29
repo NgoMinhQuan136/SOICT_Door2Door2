@@ -538,7 +538,7 @@ std::vector<std::vector<std::vector<double>>> Solution::getScore(Score &score){
             
             cusCompleteTime[techTripList[i][j][0]] = tmp1;
             for (int k = 0; k < (int) techTripList[i][j].size() - 1; k++) {
-                tmp1 += countTimeTruck(tmp1, distances[techTripList[i][j][k]][techTripList[i][j][k + 1]], input) + input.serviceTimeByTruck[techTripList[i][j][k + 1]];
+                tmp1 += countTimeTruck(tmp1 + tmp, distances[techTripList[i][j][k]][techTripList[i][j][k + 1]], input) + input.serviceTimeByTruck[techTripList[i][j][k + 1]];
                 truckTime[i][j][k + 1] = tmp + tmp1;
                 cusCompleteTime[techTripList[i][j][k + 1]] = tmp1;
                 totalTruckDemand[i][j] += input.demand[techTripList[i][j][k + 1]];
@@ -2280,11 +2280,17 @@ Solution *Solution::twoOpt(Solution &bestFeasibleSolution, bool &isImproved, Sco
         // drone
         for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
             for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
-                for (int xIndex = -1; xIndex < (int) droneTripList[droneIndex][tripIndex].size(); xIndex++) {
+                if(droneTripList[droneIndex][tripIndex].size() < 2){
+                    continue;
+                } 
+                for (int xIndex = 0; xIndex < (int) droneTripList[droneIndex][tripIndex].size() - 1; xIndex++) {
                     // tech
                     for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
                         for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
-                            for (int yIndex = -1; yIndex < (int) techTripList[techIndex][techTripIndex].size(); yIndex++) {
+                            if(techTripList[techIndex][techTripIndex].size() < 2){
+                                continue;
+                            }
+                            for (int yIndex = 0; yIndex < (int) techTripList[techIndex][techTripIndex].size() - 1; yIndex++) {
                                 
                                 bool canMoveToDroneTrip = true;
                                 for (int i = yIndex + 1; i < techTripList[techIndex][techTripIndex].size(); i++) {
@@ -2375,8 +2381,11 @@ Solution *Solution::twoOpt(Solution &bestFeasibleSolution, bool &isImproved, Sco
                             if (droneIndex == droneIndex2 && tripIndex == tripIndex2) {
                                 continue;
                             }
-                            for (int yIndex = -1;
-                                 yIndex < (int) droneTripList[droneIndex2][tripIndex2].size(); yIndex++) {
+                            if(droneTripList[droneIndex2][tripIndex2].size() < 2){
+                                continue;
+                            }
+                            for (int yIndex = 0;
+                                 yIndex < (int) droneTripList[droneIndex2][tripIndex2].size() - 1; yIndex++) {
                                 std::vector<int> tmp1, tmp2;
                                 if (xIndex >= 0) {
                                     tmp1.insert(tmp1.end(),
@@ -2453,11 +2462,17 @@ Solution *Solution::twoOpt(Solution &bestFeasibleSolution, bool &isImproved, Sco
         // tech
         for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
             for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
-                for (int xIndex = -1; xIndex < (int) techTripList[techIndex][techTripIndex].size(); xIndex++) {
+                if(techTripList[techIndex][techTripIndex].size() < 2){
+                    continue;
+                }
+                for (int xIndex = 0; xIndex < (int) techTripList[techIndex][techTripIndex].size() - 1; xIndex++) {
                     // drone
                     for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
                         for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
-                            for (int yIndex = -1; yIndex < (int) droneTripList[droneIndex][tripIndex].size(); yIndex++) {
+                            if(droneTripList[droneIndex][tripIndex].size() < 2){
+                                continue;
+                            }
+                            for (int yIndex = 0; yIndex < (int) droneTripList[droneIndex][tripIndex].size() - 1; yIndex++) {
 
                                 bool canMoveToDroneTrip = true;
                                 for (int i = xIndex + 1; i < techTripList[techIndex][techTripIndex].size(); i++) {
@@ -2546,7 +2561,10 @@ Solution *Solution::twoOpt(Solution &bestFeasibleSolution, bool &isImproved, Sco
                             if (techIndex == techIndex2 && techTripIndex2 == techTripIndex) {
                                 continue;
                             }
-                            for (int yIndex = -1; yIndex < (int) techTripList[techIndex2][techTripIndex2].size(); yIndex++) {
+                            if( techTripList[techIndex2][techTripIndex2].size() < 2){
+                                continue;
+                            }
+                            for (int yIndex = 0; yIndex < (int) techTripList[techIndex2][techTripIndex2].size() - 1; yIndex++) {
                                 std::vector<int> tmp1, tmp2;
                                 if (xIndex >= 0) {
                                     tmp1.insert(tmp1.end(),
@@ -2626,15 +2644,21 @@ Solution *Solution::twoOpt(Solution &bestFeasibleSolution, bool &isImproved, Sco
         // drone
         for (int droneIndex = 0; droneIndex < droneTripList.size(); droneIndex++) {
             for (int tripIndex = 0; tripIndex < droneTripList[droneIndex].size(); tripIndex++) {
-                for (int xIndex = -1; xIndex < (int) droneTripList[droneIndex][tripIndex].size(); xIndex++) {
+                if(droneTripList[droneIndex][tripIndex].size() < 2){
+                    continue;
+                }
+                for (int xIndex = 0; xIndex < (int) droneTripList[droneIndex][tripIndex].size() - 1; xIndex++) {
                     // drone
                     for (int droneIndex2 = 0; droneIndex2 < droneTripList.size(); droneIndex2++) {
                         for (int tripIndex2 = 0; tripIndex2 < droneTripList[droneIndex2].size(); tripIndex2++) {
                             if (droneIndex == droneIndex2 && tripIndex == tripIndex2) {
                                 continue;
                             }
-                            for (int yIndex = -1;
-                                 yIndex < (int) droneTripList[droneIndex2][tripIndex2].size(); yIndex++) {
+                            if(droneTripList[droneIndex2][tripIndex2].size() < 2){
+                                continue;
+                            }
+                            for (int yIndex = 0;
+                                 yIndex < (int) droneTripList[droneIndex2][tripIndex2].size() - 1; yIndex++) {
                                 std::vector<int> tmp1, tmp2;
                                 if (xIndex >= 0) {
                                     tmp1.insert(tmp1.end(),
@@ -2711,15 +2735,20 @@ Solution *Solution::twoOpt(Solution &bestFeasibleSolution, bool &isImproved, Sco
         // tech
         for (int techIndex = 0; techIndex < techTripList.size(); techIndex++) {
             for (int techTripIndex = 0; techTripIndex < techTripList[techIndex].size(); techTripIndex++){
-                for (int xIndex = -1; xIndex < (int) techTripList[techIndex][techTripIndex].size(); xIndex++) {
+                if(techTripList[techIndex][techTripIndex].size() < 2){
+                    continue;
+                }
+                for (int xIndex = 0; xIndex < (int) techTripList[techIndex][techTripIndex].size() - 1; xIndex++) {
                     
                     for (int techIndex2 = 0; techIndex2 < techTripList.size(); techIndex2++) {
                         for (int techTripIndex2 = 0; techTripIndex2 < techTripList[techIndex2].size(); techTripIndex2++){
                             if (techIndex == techIndex2 && techTripIndex == techTripIndex2) {
                                 continue;
                             }
-
-                            for (int yIndex = -1; yIndex < (int) techTripList[techIndex2][techTripIndex2].size(); yIndex++) {
+                            if(techTripList[techIndex2][techTripIndex2].size() < 2){
+                                continue;
+                            }
+                            for (int yIndex = 0; yIndex < (int) techTripList[techIndex2][techTripIndex2].size() - 1; yIndex++) {
                                 std::vector<int> tmp1, tmp2;
                                 if (xIndex >= 0) {
                                     tmp1.insert(tmp1.end(),
